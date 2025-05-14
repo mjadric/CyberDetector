@@ -116,12 +116,142 @@ export class MemStorage implements IStorage {
   
   currentId: number;
 
+  /**
+   * Initializes the storage layer with support for multiple databases
+   */
   constructor() {
     this.users = new Map();
     this.currentId = 1;
     
-    // Initialize with mock data
+    // Initialize with mock data (fallback for when databases are not available)
     this.initializeMockData();
+    
+    // Initialize database connections
+    this.initializeDatabases();
+  }
+  
+  /**
+   * Initialize connections to the databases
+   */
+  private async initializeDatabases() {
+    try {
+      // Try to connect to MongoDB
+      const mongoConnected = await connectToMongoDB();
+      setDatabaseConnectionStatus('mongo', mongoConnected);
+      
+      if (mongoConnected) {
+        log('MongoDB connected successfully in storage layer', 'storage');
+        
+        // Check if we have data in MongoDB collections
+        try {
+          const trafficCount = await networkTrafficCollection.countDocuments();
+          const alertsCount = await alertsCollection.countDocuments();
+          
+          log(`MongoDB has ${trafficCount} traffic documents and ${alertsCount} alerts`, 'storage');
+          
+          // If collections are empty, seed with some initial data
+          if (trafficCount === 0) {
+            log('Seeding MongoDB with initial traffic data...', 'storage');
+            await this.seedMongoDBTrafficData();
+          }
+        } catch (err) {
+          log(`Error checking MongoDB collections: ${err}`, 'storage');
+        }
+      }
+      
+      // Try to connect to PostgreSQL
+      const postgresConnected = await connectToPostgres();
+      setDatabaseConnectionStatus('postgres', postgresConnected);
+      if (postgresConnected) {
+        log('PostgreSQL connected successfully in storage layer', 'storage');
+      }
+      
+      // Try to connect to Neo4j
+      const neo4jConnected = await connectToNeo4j();
+      setDatabaseConnectionStatus('neo4j', neo4jConnected);
+      if (neo4jConnected) {
+        log('Neo4j connected successfully in storage layer', 'storage');
+      }
+    } catch (error) {
+      log(`Error initializing databases: ${error}`, 'storage');
+    }
+  }
+  
+  /**
+   * Seed MongoDB with initial traffic data
+   */
+  private async seedMongoDBTrafficData() {
+    try {
+      const protocols = ['tcp', 'udp', 'icmp'];
+      const now = new Date();
+      
+      // Create 100 traffic documents for the last hour
+      const trafficData = Array.from({ length: 100 }, (_, i) => {
+        const timestamp = new Date(now.getTime() - Math.random() * 3600 * 1000);
+        const protocol = protocols[Math.floor(Math.random() * protocols.length)];
+        const isAnomaly = Math.random() < 0.1; // 10% chance to be anomaly
+        
+        return {
+          timestamp,
+          source_ip: `192.168.1.${Math.floor(Math.random() * 254) + 1}`,
+          destination_ip: `10.0.0.${Math.floor(Math.random() * 10) + 1}`,
+          protocol,
+          packet_size: Math.floor(Math.random() * 1000) + 64,
+          flags: protocol === 'tcp' ? ['SYN', 'ACK'].filter(() => Math.random() < 0.5) : undefined,
+          is_anomaly: isAnomaly,
+          score: isAnomaly ? Math.random() * 0.9 + 0.1 : 0
+        } as NetworkTrafficDoc;
+      });
+      
+      // Insert traffic data
+      await networkTrafficCollection.insertMany(trafficData);
+      log(`Inserted ${trafficData.length} traffic documents into MongoDB`, 'storage');
+      
+      // Create an attack event
+      const attackEvent: AttackEventDoc = {
+        start_time: new Date(now.getTime() - 30 * 60 * 1000), // 30 minutes ago
+        attack_type: 'TCP SYN Flood',
+        source_ips: Array.from(new Set(trafficData.filter(t => t.is_anomaly).map(t => t.source_ip))),
+        target_ips: ['10.0.0.1', '10.0.0.2'],
+        severity: 8,
+        confidence: 0.92,
+        mitigated: false,
+        packet_count: trafficData.filter(t => t.is_anomaly).length
+      };
+      
+      // Insert attack event
+      await attackEventsCollection.insertOne(attackEvent);
+      log('Inserted attack event into MongoDB', 'storage');
+      
+      // Create alerts
+      const alerts: AlertDoc[] = [
+        {
+          timestamp: new Date(now.getTime() - 25 * 60 * 1000), // 25 minutes ago
+          type: 'TCP SYN Flood',
+          message: 'High volume of SYN packets detected from multiple sources',
+          severity: 'high',
+          acknowledged: false
+        },
+        {
+          timestamp: new Date(now.getTime() - 15 * 60 * 1000), // 15 minutes ago
+          type: 'Source IP Entropy Drop',
+          message: 'Significant decrease in source IP entropy observed',
+          severity: 'medium',
+          acknowledged: false
+        }
+      ];
+      
+      // Insert alerts
+      await alertsCollection.insertMany(alerts);
+      log(`Inserted ${alerts.length} alerts into MongoDB`, 'storage');
+      
+      // Generate time-series aggregation
+      await aggregateTimeSeriesData(5);
+      log('Generated time-series aggregation in MongoDB', 'storage');
+      
+    } catch (error) {
+      log(`Error seeding MongoDB: ${error}`, 'storage');
+    }
   }
 
   private initializeMockData() {
@@ -321,22 +451,317 @@ export class MemStorage implements IStorage {
   
   // Network metrics
   async getLatestNetworkMetrics(): Promise<any> {
+    // Try to use PostgreSQL if available
+    if (dbStatus.postgresConnected) {
+      try {
+        const metrics = await pgGetNetworkMetrics();
+        if (metrics.length > 0) {
+          return metrics;
+        }
+      } catch (error) {
+        log(`PostgreSQL error getting metrics: ${error}`, 'storage');
+      }
+    }
+    
+    // Otherwise use MongoDB for some metrics if available
+    if (dbStatus.mongoConnected) {
+      try {
+        // Count recent traffic
+        const now = new Date();
+        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+        
+        const totalTraffic = await networkTrafficCollection.countDocuments({
+          timestamp: { $gte: oneHourAgo }
+        });
+        
+        const anomalyTraffic = await networkTrafficCollection.countDocuments({
+          timestamp: { $gte: oneHourAgo },
+          is_anomaly: true
+        });
+        
+        const activeAttacks = await attackEventsCollection.countDocuments({
+          mitigated: false
+        });
+        
+        // If we have some data, return MongoDB-based metrics
+        if (totalTraffic > 0) {
+          const metrics = [
+            { 
+              id: 1, 
+              name: "Network Load", 
+              value: `${Math.min(99, Math.round(totalTraffic / 10))}%`, 
+              change: "+15%", 
+              icon: "device_hub", 
+              color: "text-[#3B82F6]" 
+            },
+            { 
+              id: 2, 
+              name: "Packet Rate", 
+              value: `${Math.round(totalTraffic / 6) / 10}K/s`, 
+              change: "+8%", 
+              icon: "speed", 
+              color: "text-[#10B981]" 
+            },
+            { 
+              id: 3, 
+              name: "Threat Level", 
+              value: activeAttacks > 0 ? "High" : "Low", 
+              change: activeAttacks > 0 ? "+23%" : "-5%", 
+              icon: "security", 
+              color: activeAttacks > 0 ? "text-[#F59E0B]" : "text-[#10B981]" 
+            },
+            { 
+              id: 4, 
+              name: "Blocked Attacks", 
+              value: anomalyTraffic.toString(), 
+              change: "98%", 
+              icon: "gpp_good", 
+              color: "text-[#5D3FD3]" 
+            }
+          ];
+          
+          log('Using MongoDB data for network metrics', 'storage');
+          return metrics;
+        }
+      } catch (error) {
+        log(`MongoDB error getting metrics: ${error}`, 'storage');
+      }
+    }
+    
+    // Fallback to mock data
     return this.networkMetrics;
   }
   
   async getTrafficData(): Promise<any> {
+    // Try to use MongoDB if available
+    if (dbStatus.mongoConnected) {
+      try {
+        // Aggregate traffic data by hour for last 24 hours
+        const now = new Date();
+        const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        
+        // Get all traffic from the last 24 hours
+        const trafficDocs = await networkTrafficCollection.find({
+          timestamp: { $gte: dayAgo }
+        }).toArray();
+        
+        if (trafficDocs.length > 0) {
+          // Create hour buckets for last 24 hours
+          const hourBuckets: Record<string, { normal: number, attack: number }> = {};
+          
+          // Initialize all hour buckets with zeros
+          for (let i = 0; i < 24; i++) {
+            const hourString = `${i}:00`;
+            hourBuckets[hourString] = { normal: 0, attack: 0 };
+          }
+          
+          // Group traffic by hour
+          trafficDocs.forEach(doc => {
+            const hour = doc.timestamp.getHours();
+            const hourString = `${hour}:00`;
+            
+            if (doc.is_anomaly) {
+              hourBuckets[hourString].attack++;
+            } else {
+              hourBuckets[hourString].normal++;
+            }
+          });
+          
+          // Convert to arrays for chart.js
+          const labels = Object.keys(hourBuckets).sort((a, b) => {
+            const hourA = parseInt(a.split(':')[0]);
+            const hourB = parseInt(b.split(':')[0]);
+            return hourA - hourB;
+          });
+          
+          const normalData = labels.map(hour => hourBuckets[hour].normal);
+          const attackData = labels.map(hour => hourBuckets[hour].attack);
+          
+          log('Using MongoDB data for traffic chart', 'storage');
+          return { labels, normalData, attackData };
+        }
+      } catch (error) {
+        log(`MongoDB error getting traffic data: ${error}`, 'storage');
+      }
+    }
+    
+    // Fallback to mock data
     return this.trafficData;
   }
   
   async getProtocolDistribution(): Promise<any> {
+    // Try to use MongoDB if available
+    if (dbStatus.mongoConnected) {
+      try {
+        // Aggregate traffic by protocol
+        const result = await networkTrafficCollection.aggregate([
+          {
+            $group: {
+              _id: { $toUpper: "$protocol" },
+              count: { $sum: 1 }
+            }
+          },
+          {
+            $project: {
+              protocol: "$_id",
+              count: 1,
+              _id: 0
+            }
+          },
+          {
+            $sort: { count: -1 }
+          },
+          {
+            $limit: 5
+          }
+        ]).toArray();
+        
+        if (result.length > 0) {
+          // Calculate total
+          const total = result.reduce((sum, item) => sum + item.count, 0);
+          
+          // Calculate percentages and assign colors
+          const colors = ["bg-[#3B82F6]", "bg-[#10B981]", "bg-[#F59E0B]", "bg-[#5D3FD3]", "bg-[#EF4444]"];
+          
+          const protocols = result.map((item, index) => ({
+            protocol: item.protocol,
+            percentage: Math.round((item.count / total) * 100),
+            color: colors[index % colors.length]
+          }));
+          
+          log('Using MongoDB data for protocol distribution', 'storage');
+          return protocols;
+        }
+      } catch (error) {
+        log(`MongoDB error getting protocol distribution: ${error}`, 'storage');
+      }
+    }
+    
+    // Fallback to mock data
     return this.protocolDistribution;
   }
   
   async getRecentAlerts(): Promise<any> {
+    // Try to use MongoDB if available
+    if (dbStatus.mongoConnected) {
+      try {
+        // Get most recent alerts from MongoDB
+        const alerts = await alertsCollection.find()
+          .sort({ timestamp: -1 })
+          .limit(5)
+          .toArray();
+          
+        if (alerts.length > 0) {
+          // Get attack events for context
+          const attackEvents = await attackEventsCollection.find().toArray();
+          
+          // Format alerts for the frontend
+          const formattedAlerts = alerts.map((alert, index) => {
+            // Find related attack event if available
+            const attackEvent = alert.attack_event_id ? 
+              attackEvents.find(a => a._id.toString() === alert.attack_event_id) : 
+              attackEvents[0]; // Just use the first attack event if no relation
+              
+            return {
+              id: index + 1,
+              time: `${alert.timestamp.getHours()}:${alert.timestamp.getMinutes().toString().padStart(2, '0')}:${alert.timestamp.getSeconds().toString().padStart(2, '0')}`,
+              type: alert.type,
+              source: attackEvent ? 
+                (attackEvent.source_ips.length > 1 ? 
+                  `Multiple (${attackEvent.source_ips.length})` : 
+                  attackEvent.source_ips[0]) : 
+                "Unknown",
+              target: attackEvent ? 
+                (attackEvent.target_ips.length > 0 ? 
+                  attackEvent.target_ips[0] : 
+                  "Multiple") : 
+                "Unknown",
+              severity: alert.severity,
+              status: alert.acknowledged ? "mitigated" : "active"
+            };
+          });
+          
+          log('Using MongoDB data for alerts', 'storage');
+          return formattedAlerts;
+        }
+      } catch (error) {
+        log(`MongoDB error getting alerts: ${error}`, 'storage');
+      }
+    }
+    
+    // Try to use PostgreSQL if available
+    if (dbStatus.postgresConnected) {
+      try {
+        const alerts = await pgGetAlerts();
+        if (alerts.length > 0) {
+          return alerts;
+        }
+      } catch (error) {
+        log(`PostgreSQL error getting alerts: ${error}`, 'storage');
+      }
+    }
+    
+    // Fallback to mock data
     return this.alerts;
   }
   
   async getIpAnalysis(): Promise<any> {
+    // Try to use MongoDB if available
+    if (dbStatus.mongoConnected) {
+      try {
+        // Aggregate traffic by source IP to find suspicious IPs
+        const result = await networkTrafficCollection.aggregate([
+          {
+            $group: {
+              _id: "$source_ip",
+              packetCount: { $sum: 1 },
+              anomalyCount: { 
+                $sum: { $cond: [{ $eq: ["$is_anomaly", true] }, 1, 0] }
+              },
+              firstSeen: { $min: "$timestamp" }
+            }
+          },
+          {
+            $match: {
+              packetCount: { $gt: 10 } // Only IPs with significant traffic
+            }
+          },
+          {
+            $sort: { anomalyCount: -1, packetCount: -1 }
+          },
+          {
+            $limit: 5
+          }
+        ]).toArray();
+        
+        if (result.length > 0) {
+          // Format data for frontend
+          const ipAnalysis = result.map(ip => {
+            const status = ip.anomalyCount > 5 ? "blocked" : 
+                          (ip.anomalyCount > 0 ? "suspicious" : "normal");
+                          
+            const now = new Date();
+            const firstSeen = new Date(ip.firstSeen);
+            const formatTime = (date: Date) => 
+              `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+            
+            return {
+              ip: ip._id,
+              status,
+              packets: `${(ip.packetCount / 1000).toFixed(1)}K`,
+              firstSeen: formatTime(firstSeen)
+            };
+          });
+          
+          log('Using MongoDB data for IP analysis', 'storage');
+          return ipAnalysis;
+        }
+      } catch (error) {
+        log(`MongoDB error getting IP analysis: ${error}`, 'storage');
+      }
+    }
+    
+    // Fallback to mock data
     return this.ipAnalysis;
   }
   
@@ -363,19 +788,274 @@ export class MemStorage implements IStorage {
   
   // Network topology
   async getNetworkTopology(): Promise<any> {
+    // Try to use Neo4j if available
+    if (dbStatus.neo4jConnected) {
+      try {
+        const topology = await createNetworkTopologyModel();
+        if (topology.nodes.length > 0) {
+          // Additional data for frontend
+          const structure = [
+            { 
+              layer: "Core Layer", 
+              devices: `${topology.nodes.filter(n => n.type === 'router').length} Router`,
+              status: "Operational" 
+            },
+            { 
+              layer: "Distribution Layer", 
+              devices: `${topology.nodes.filter(n => n.type === 'switch').length} Switches`,
+              status: "Operational" 
+            },
+            { 
+              layer: "Access Layer", 
+              devices: `${topology.nodes.filter(n => n.type === 'server').length} Servers, ${topology.nodes.filter(n => n.type === 'client').length} Hosts`,
+              status: "Operational" 
+            }
+          ];
+          
+          // Format the data structure for the frontend
+          const result = {
+            nodes: topology.nodes.map(node => ({
+              id: node.id,
+              name: node.name,
+              type: node.type,
+              x: Math.random() * 800,  // Random positioning if not provided
+              y: Math.random() * 400,
+              status: node.status || 'normal'
+            })),
+            links: topology.links.map(link => ({
+              source: link.source,
+              target: link.target,
+              status: link.properties?.status || 'normal'
+            })),
+            structure,
+            attackDetails: {
+              target: "server-3",
+              type: "TCP SYN Flood",
+              sources: "23 malicious IPs",
+              status: "Active"
+            }
+          };
+          
+          log('Using Neo4j data for network topology', 'storage');
+          return result;
+        }
+      } catch (error) {
+        log(`Neo4j error getting network topology: ${error}`, 'storage');
+      }
+    }
+    
+    // Try to use PostgreSQL if available
+    if (dbStatus.postgresConnected) {
+      try {
+        const topology = await pgGetNetworkTopology();
+        if (topology.nodes.length > 0) {
+          log('Using PostgreSQL data for network topology', 'storage');
+          
+          // Add structure data that might be missing from PostgreSQL
+          const structure = [
+            { 
+              layer: "Core Layer", 
+              devices: `${topology.nodes.filter(n => n.type === 'router').length} Router`,
+              status: "Operational" 
+            },
+            { 
+              layer: "Distribution Layer", 
+              devices: `${topology.nodes.filter(n => n.type === 'switch').length} Switches`,
+              status: "Operational" 
+            },
+            { 
+              layer: "Access Layer", 
+              devices: `${topology.nodes.filter(n => n.type === 'server').length} Servers, ${topology.nodes.filter(n => n.type === 'client').length} Hosts`,
+              status: "Operational" 
+            }
+          ];
+          
+          return {
+            ...topology,
+            structure,
+            attackDetails: {
+              target: "server-3",
+              type: "TCP SYN Flood",
+              sources: "23 malicious IPs",
+              status: "Active"
+            }
+          };
+        }
+      } catch (error) {
+        log(`PostgreSQL error getting network topology: ${error}`, 'storage');
+      }
+    }
+    
+    // Fallback to mock data
     return this.networkTopology;
   }
   
   async getTrafficPaths(): Promise<any> {
+    // Try to use PostgreSQL if available
+    if (dbStatus.postgresConnected) {
+      try {
+        const paths = await pgGetTrafficPaths();
+        if (paths.length > 0) {
+          log('Using PostgreSQL data for traffic paths', 'storage');
+          return paths;
+        }
+      } catch (error) {
+        log(`PostgreSQL error getting traffic paths: ${error}`, 'storage');
+      }
+    }
+    
+    // Try to use Neo4j for path analysis if available
+    if (dbStatus.neo4jConnected) {
+      try {
+        // Create a custom path analysis
+        const paths = [];
+        
+        // Get some source and target nodes
+        if (dbStatus.mongoConnected) {
+          try {
+            // Find top source IPs from MongoDB
+            const topSources = await networkTrafficCollection.aggregate([
+              { $group: { _id: "$source_ip", count: { $sum: 1 } } },
+              { $sort: { count: -1 } },
+              { $limit: 3 }
+            ]).toArray();
+            
+            // Find top destination IPs from MongoDB
+            const topDests = await networkTrafficCollection.aggregate([
+              { $group: { _id: "$destination_ip", count: { $sum: 1 } } },
+              { $sort: { count: -1 } },
+              { $limit: 3 }
+            ]).toArray();
+            
+            if (topSources.length > 0 && topDests.length > 0) {
+              // Format paths for the frontend
+              let pathId = 1;
+              for (let i = 0; i < Math.min(3, topSources.length); i++) {
+                for (let j = 0; j < Math.min(1, topDests.length); j++) {
+                  const source = topSources[i]._id;
+                  const dest = topDests[j]._id;
+                  const anomaly = await networkTrafficCollection.countDocuments({
+                    source_ip: source,
+                    destination_ip: dest,
+                    is_anomaly: true
+                  });
+                  
+                  paths.push({
+                    id: pathId++,
+                    pathId: `P-${String(pathId).padStart(3, '0')}`,
+                    source,
+                    destination: dest,
+                    hops: "3 (R1→SW2→server)",
+                    trafficVolume: `${(topSources[i].count / 1000).toFixed(1)}K packets`,
+                    status: anomaly > 0 ? "anomalous" : "normal"
+                  });
+                }
+              }
+              
+              log('Using MongoDB + Neo4j for traffic paths', 'storage');
+              return paths;
+            }
+          } catch (error) {
+            log(`MongoDB error for traffic paths: ${error}`, 'storage');
+          }
+        }
+      } catch (error) {
+        log(`Neo4j error getting traffic paths: ${error}`, 'storage');
+      }
+    }
+    
+    // Fallback to mock data
     return this.trafficPaths;
   }
   
   async getVulnerabilityAnalysis(): Promise<any> {
+    // Try to use Neo4j for vulnerability analysis if available
+    if (dbStatus.neo4jConnected) {
+      try {
+        const vulnerablePaths = await findVulnerablePaths();
+        
+        if (vulnerablePaths.length > 0) {
+          // Format data for frontend
+          const vulnerabilityAnalysis = {
+            centrality: [
+              { name: "Degree Centrality (server-3)", value: 0.85 },
+              { name: "Closeness Centrality (server-3)", value: 0.72 },
+              { name: "Betweenness Centrality (R1)", value: 0.94 }
+            ],
+            attackPath: {
+              path: `Attacker(${vulnerablePaths[0].source.id}) → ${vulnerablePaths[0].path.join(' → ')}`,
+              score: `${Math.round((vulnerablePaths[0].risk === 'high' ? 8.7 : (vulnerablePaths[0].risk === 'medium' ? 6.5 : 3.2)) * 10) / 10}/10`
+            },
+            communities: [
+              { name: "Cluster 1: Web servers (2 nodes)", color: "bg-[#3B82F6]" },
+              { name: "Cluster 2: Database servers (1 node)", color: "bg-[#F59E0B]" },
+              { name: "Cluster 3: Attack targets (1 node)", color: "bg-[#EF4444]" }
+            ]
+          };
+          
+          log('Using Neo4j data for vulnerability analysis', 'storage');
+          return vulnerabilityAnalysis;
+        }
+      } catch (error) {
+        log(`Neo4j error getting vulnerability analysis: ${error}`, 'storage');
+      }
+    }
+    
+    // Fallback to mock data
     return this.vulnerabilityAnalysis;
   }
   
   // Action methods
   async mitigateAttack(alertId: number): Promise<any> {
+    // Try to use MongoDB if available
+    if (dbStatus.mongoConnected) {
+      try {
+        // Get the alert by ID (using our own ID system since MongoDB has ObjectId)
+        const alerts = await alertsCollection.find().sort({ timestamp: -1 }).limit(10).toArray();
+        const alert = alerts[alertId - 1]; // Convert 1-based index to 0-based
+        
+        if (alert) {
+          // Update the alert in MongoDB
+          await alertsCollection.updateOne(
+            { _id: alert._id },
+            { $set: { acknowledged: true } }
+          );
+          
+          // If there's an associated attack, mark it as mitigated too
+          if (alert.attack_event_id) {
+            await attackEventsCollection.updateOne(
+              { _id: alert.attack_event_id },
+              { 
+                $set: { 
+                  mitigated: true,
+                  end_time: new Date(),
+                  mitigation_action: "Auto-mitigation via DDQN"
+                } 
+              }
+            );
+          }
+          
+          // Try to also update Neo4j if connected
+          if (dbStatus.neo4jConnected && alert.attack_event_id) {
+            try {
+              await neo4jMitigateAttack(
+                alert.attack_event_id.toString(),
+                "Auto-mitigation via DDQN"
+              );
+            } catch (neoError) {
+              log(`Neo4j error mitigating attack: ${neoError}`, 'storage');
+            }
+          }
+          
+          log(`MongoDB: Mitigated attack with alert ID ${alertId}`, 'storage');
+          return { success: true, message: `Attack ${alertId} has been mitigated` };
+        }
+      } catch (error) {
+        log(`MongoDB error mitigating attack: ${error}`, 'storage');
+      }
+    }
+    
+    // Fallback to in-memory implementation
     const alert = this.alerts.find(a => a.id === alertId);
     if (alert) {
       alert.status = "mitigated";
@@ -385,6 +1065,39 @@ export class MemStorage implements IStorage {
   }
   
   async blockIp(ip: string): Promise<any> {
+    // Try to use MongoDB if available
+    if (dbStatus.mongoConnected) {
+      try {
+        // Find all traffic from this IP
+        const count = await networkTrafficCollection.countDocuments({ source_ip: ip });
+        
+        if (count > 0) {
+          // Mark all traffic from this IP as anomaly
+          await networkTrafficCollection.updateMany(
+            { source_ip: ip },
+            { $set: { is_anomaly: true, score: 0.95 } }
+          );
+          
+          // Create a new alert for this blocked IP
+          const alert: AlertDoc = {
+            timestamp: new Date(),
+            type: "IP Blocked",
+            message: `IP ${ip} has been blocked by administrator action`,
+            severity: "high",
+            acknowledged: false
+          };
+          
+          await alertsCollection.insertOne(alert);
+          
+          log(`MongoDB: Blocked IP ${ip}`, 'storage');
+          return { success: true, message: `IP ${ip} has been blocked` };
+        }
+      } catch (error) {
+        log(`MongoDB error blocking IP: ${error}`, 'storage');
+      }
+    }
+    
+    // Fallback to in-memory implementation
     const ipAnalysisEntry = this.ipAnalysis.find(entry => entry.ip === ip);
     if (ipAnalysisEntry) {
       ipAnalysisEntry.status = "blocked";
