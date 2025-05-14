@@ -4,15 +4,14 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTheme } from "@/hooks/use-theme";
 import { useState, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { CheckCircle, XCircle, Loader2, Moon, Sun } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export default function Settings() {
   // Settings state
-  const { theme, setTheme } = useTheme();
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [apiEndpoint, setApiEndpoint] = useState("http://localhost:5000");
   const [refreshInterval, setRefreshInterval] = useState("30");
   const [alertNotifications, setAlertNotifications] = useState(true);
