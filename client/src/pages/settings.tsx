@@ -105,6 +105,56 @@ export default function Settings() {
                 </SelectContent>
               </Select>
             </div>
+            
+            <div className="space-y-2 mt-4 pt-4 border-t">
+              <div className="flex justify-between items-center">
+                <Label>Python Backend Status</Label>
+                {pythonApiStatus === 'loading' ? (
+                  <Badge variant="outline" className="flex items-center">
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    Checking...
+                  </Badge>
+                ) : pythonApiStatus === 'online' ? (
+                  <Badge variant="outline" className="bg-green-600 text-white hover:bg-green-700">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Online
+                  </Badge>
+                ) : (
+                  <Badge variant="destructive">
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Offline
+                  </Badge>
+                )}
+              </div>
+              
+              {pythonApiStatus === 'online' && pythonApiDetails && (
+                <div className="text-xs text-muted-foreground mt-1">
+                  <div>Version: {pythonApiDetails.version}</div>
+                  <div>Features: {Object.entries(pythonApiDetails.features || {})
+                    .filter(([_, enabled]) => enabled)
+                    .map(([name]) => name)
+                    .join(', ')}
+                  </div>
+                </div>
+              )}
+              
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-2 text-xs"
+                onClick={checkPythonApiStatus}
+                disabled={pythonApiStatus === 'loading'}
+              >
+                {pythonApiStatus === 'loading' ? (
+                  <>
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    Checking...
+                  </>
+                ) : (
+                  'Check Connection'
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
         
