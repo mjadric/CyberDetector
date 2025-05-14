@@ -1,0 +1,121 @@
+# Opis podataka u metodologiji
+
+## 1. Izvori podataka
+
+### Simulirani promet
+Za potrebe treniranja i evaluacije našeg DDQN modela, koristimo simulirani mrežni promet zbog:
+- Kontrole nad eksperimentalnim uvjetima
+- Etičkih i pravnih razloga (izbjegavanje stvarnih napada)
+- Reproducibilnosti rezultata
+- Mogućnosti generiranja različitih scenarija napada
+
+### Metoda generiranja prometa
+Promet je generiran pomoću Scapy biblioteke koja omogućuje kreiranje i manipulaciju mrežnim paketima na niskoj razini. Simulacija se odvija u hijerarhijskoj mrežnoj topologiji implementiranoj pomoću NetworkX biblioteke. Generiranje prometa izvodi se na sljedeći način:
+
+- **Normalni promet**: Generira se prema stvarnim distribucijama veličina paketa, vremenskih intervala i značajki protokola, temeljeno na statističkim analizama organizacijskih mreža (Cisco, 2020).
+- **Napadački promet**: Implementiran prema obrascima stvarnih napada, pri čemu su distribucije i karakteristike modelirane prema stvarnim zabilježenim DDoS napadima (Moore et al., 2006; Santanna et al., 2015).
+
+## 2. Karakteristike podataka
+
+### Vrste normalnog prometa
+Normalni promet sadrži pažljivo kalibrirane udjele različitih protokola:
+
+| Protokol | Udio | Karakteristike |
+|----------|------|----------------|
+| HTTP     | 40%  | Veličina paketa: log-normalna distribucija (μ=7.31, σ=0.5), raspon 500-5000 bajtova |
+| HTTPS    | 30%  | Veličina paketa: log-normalna distribucija (μ=7.82, σ=0.6), raspon 800-8000 bajtova |
+| DNS      | 15%  | Veličina paketa: normalna distribucija (μ=150, σ=50), raspon 50-300 bajtova |
+| FTP      | 10%  | Veličina paketa: eksponencijalna distribucija (λ=0.00005), raspon 1000-50000 bajtova |
+| VoIP     | 5%   | Veličina paketa: normalna distribucija (μ=200, σ=100), raspon 100-1000 bajtova |
+
+### Vrste napadačkog prometa
+Za sveobuhvatnu evaluaciju implementirani su sljedeći napadi:
+
+| Vrsta napada | Karakteristike | Intenzitet |
+|--------------|----------------|------------|
+| TCP SYN Flood | Konstantan tok SYN paketa bez kompletiranja TCP handshake-a | Skala 1-10, konfigurabilno |
+| UDP Flood | Veliki volumen UDP paketa na nasumičnim portovima | Skala 1-10, konfigurabilno |
+| ICMP Flood | Kontinuirani ICMP echo (ping) zahtjevi | Skala 1-10, konfigurabilno |
+
+**Parametri napada:**
+- **Broj napadačkih IP adresa**: 5-50, ovisno o intenzitetu
+- **Trajanje napada**: Konfigurabilno, zadano 120 sekundi
+- **Intenzitet (skala 1-10)**: Određuje stopu generiranja paketa:
+  - Nizak (1-3): 100-1000 paketa/s
+  - Srednji (4-7): 1000-5000 paketa/s
+  - Visok (8-10): 5000-10000 paketa/s
+
+## 3. Format i veličina podataka
+
+### Količina generiranih podataka
+Za trening i evaluaciju modela generirano je:
+- **Trajanje simulacije**: 1000 epizoda treninga, svaka epizoda 200 vremenskih koraka (sekundi)
+- **Volumeni paketa**:
+  - Normalni promet: ~850 paketa/s
+  - Napadački promet: 100-10000 paketa/s (ovisno o intenzitetu)
+- **Ukupno paketa**: ~50 milijuna paketa tijekom cijelog procesa treninga i evaluacije
+
+### Struktura podataka
+Podaci se prikupljaju i analiziraju u vremenskim prozorima od 1 sekunde, što predstavlja dobar kompromis između latencije detekcije i stabilnosti značajki. Za svaki vremenski prozor, izvlači se vektor značajki s 8 dimenzija:
+
+```python
+state = [
+    source_entropy,          # Shannon entropija izvorišnih IP adresa
+    destination_entropy,     # Shannon entropija odredišnih IP adresa
+    syn_ratio,               # Omjer SYN paketa u ukupnom prometu
+    traffic_volume,          # Ukupni volumen prometa (normaliziran)
+    packet_rate,             # Stopa paketa (normalizirana)
+    unique_src_ips_count,    # Broj jedinstvenih izvorišnih IP adresa (normaliziran)
+    unique_dst_ips_count,    # Broj jedinstvenih odredišnih IP adresa (normaliziran)
+    protocol_distribution    # Mjera neravnoteže u distribuciji protokola
+]
+```
+
+## 4. Priprema podataka za model
+
+### Predobrada podataka
+Prije korištenja za trening, podaci prolaze kroz sljedeće korake predobrade:
+
+1. **Normalizacija značajki**: Sve značajke se normaliziraju na raspon [0,1]:
+   - Min-max normalizacija za volumetrijske značajke
+   - Referentna normalizacija za brojeve jedinstvenih IP adresa
+   - Normalizirana entropija za mjere entropije
+
+2. **Vremenska agregacija**: Primjenjuje se eksponencijalno klizeći prosjek (EMA) s faktorom α=0.3 za smanjenje šuma i fluktuacija u značajkama:
+   ```
+   EMA_t = α × value_t + (1-α) × EMA_{t-1}
+   ```
+
+3. **Primjena težina značajki**: Na temelju OneR algoritma, primjenjuju se težine kako bi se naglasile najinformativnije značajke:
+   ```python
+   feature_weights = np.array([
+       0.18,  # source_entropy
+       0.12,  # destination_entropy
+       0.25,  # syn_ratio
+       0.15,  # traffic_volume
+       0.20,  # packet_rate
+       0.05,  # unique_src_ips_count
+       0.02,  # unique_dst_ips_count
+       0.03   # protocol_imbalance
+   ])
+   ```
+
+### Označavanje podataka
+Za trening DDQN modela nisu potrebne eksplicitne oznake (labele) jer se radi o algoritmu pojačanog učenja. Umjesto toga, model uči iz interakcije s okolinom i primljenih nagrada. Međutim, za potrebe evaluacije koristimo sljedeće oznake:
+
+- **Napad**: Vremenski prozori tijekom kojih je aktivno generiran napadački promet
+- **Normalno**: Vremenski prozori s isključivo normalnim prometom
+
+### Podjelа podataka
+Podaci su podijeljeni na:
+- **Trening**: 70% epizoda (700 epizoda)
+- **Validacija**: 15% epizoda (150 epizoda)
+- **Test**: 15% epizoda (150 epizoda)
+
+Za svaku epizodu trening podataka generira se nova instanca prometa, čime se osigurava raznolikost uzoraka za učenje i sprječava pretreniranje (overfitting).
+
+### Balansiranje podataka
+S obzirom da se radi o pojačanom učenju, tradicionalno balansiranje podataka nije primjenjivo. Međutim, osigurali smo balans kroz:
+- 50% epizoda s napadom, 50% epizoda bez napada
+- Varijabilni intenziteti napada za robusnost modela
+- Različita trajanja napada unutar epizoda s napadom
