@@ -9,6 +9,65 @@ import {
   type NetworkNode,
   type NetworkLink
 } from "@shared/schema";
+import { log } from "./vite";
+
+// Import MongoDB functionality
+import { 
+  connectToMongoDB, 
+  networkTrafficCollection, 
+  attackEventsCollection, 
+  alertsCollection, 
+  packetSamplesCollection,
+  timeSeriesDataCollection,
+  aggregateTimeSeriesData,
+  extractFeaturesForDDQN,
+  type NetworkTrafficDoc,
+  type AttackEventDoc,
+  type AlertDoc
+} from "./database/mongodb";
+
+// Import PostgreSQL functionality
+import { 
+  connectToPostgres,
+  getNetworkMetrics as pgGetNetworkMetrics,
+  getAlerts as pgGetAlerts,
+  getNetworkTopology as pgGetNetworkTopology,
+  getTrafficPaths as pgGetTrafficPaths,
+  getNetworkTrafficData as pgGetNetworkTrafficData
+} from "./database/postgres";
+
+// Import Neo4j functionality
+import {
+  connectToNeo4j,
+  createNetworkTopologyModel,
+  findVulnerablePaths,
+  recordNetworkFlow,
+  recordAttack,
+  mitigateAttack as neo4jMitigateAttack
+} from "./database/neo4j";
+
+// Database connection status
+const dbStatus = {
+  mongoConnected: false,
+  postgresConnected: false,
+  neo4jConnected: false
+};
+
+/**
+ * Set the connection status of a specific database
+ */
+export function setDatabaseConnectionStatus(db: 'mongo' | 'postgres' | 'neo4j', status: boolean) {
+  if (db === 'mongo') dbStatus.mongoConnected = status;
+  else if (db === 'postgres') dbStatus.postgresConnected = status;
+  else if (db === 'neo4j') dbStatus.neo4jConnected = status;
+}
+
+/**
+ * Get database connection status
+ */
+export function getDatabaseConnectionStatus() {
+  return { ...dbStatus };
+}
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
