@@ -23,37 +23,101 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # Add server directory to Python path to allow importing analysis modules
-sys.path.append(os.path.join(os.path.dirname(__file__), "analysis"))
+analysis_dir = os.path.join(os.path.dirname(__file__), "analysis")
+print(f"Adding analysis directory to path: {analysis_dir}")
+sys.path.append(analysis_dir)
 
-# Import analysis modules (with error handling)
+# Create normalize_state function if module import fails
+def normalize_state(state):
+    """Default normalize_state function when imports fail"""
+    if not isinstance(state, np.ndarray):
+        state = np.array(state)
+    return state / np.max(np.abs(state)) if np.max(np.abs(state)) > 0 else state
+
+# Create create_mitigation_action function if module import fails
+def create_mitigation_action(action_index, intensity=None):
+    """Default create_mitigation_action function when imports fail"""
+    actions = [
+        "No action needed",
+        "Rate limiting",
+        "Traffic filtering",
+        "Connection blocking"
+    ]
+    action_name = actions[min(action_index, len(actions)-1)]
+    return {
+        "action": action_name,
+        "intensity": intensity or random.uniform(0.5, 1.0),
+        "description": f"Apply {action_name} to mitigate potential attack"
+    }
+
+# Define base classes (will be overridden if imports succeed)
+class DDQNAgent:
+    """Placeholder DDQN Agent when module import fails"""
+    def __init__(self, *args, **kwargs):
+        print("Using placeholder DDQNAgent")
+    
+    def act(self, state):
+        return random.randint(0, 3)  # Return random action between 0-3
+
+class TrafficAnalyzer:
+    """Placeholder Traffic Analyzer when module import fails"""
+    def __init__(self, *args, **kwargs):
+        print("Using placeholder TrafficAnalyzer")
+    
+    def generate_analysis_data(self):
+        return {
+            "traffic_patterns": {"timestamps": [], "values": []},
+            "anomalies": [],
+            "error": "Real analysis modules not available"
+        }
+    
+    def generate_feature_importance(self):
+        return {
+            "labels": ["Feature 1", "Feature 2", "Feature 3"],
+            "values": [0.7, 0.2, 0.1]
+        }
+
+class NetworkTopologyAnalyzer:
+    """Placeholder Network Topology Analyzer when module import fails"""
+    def __init__(self):
+        print("Using placeholder NetworkTopologyAnalyzer")
+    
+    def get_topology(self):
+        return {"nodes": [], "links": []}
+    
+    def generate_default_topology(self):
+        """Generate a default topology for testing"""
+        return self.get_topology()
+    
+    def get_vulnerability_analysis(self):
+        """Return placeholder vulnerability analysis"""
+        return {
+            "centrality": [],
+            "critical_nodes": [],
+            "attack_paths": []
+        }
+    
+    def generate_traffic_paths(self):
+        """Return placeholder traffic paths"""
+        return []
+
+# Try to import real modules (will override base classes if successful)
 try:
-    from analysis.ddqn import DDQNAgent, normalize_state, create_mitigation_action
-    from analysis.traffic_analyzer import TrafficAnalyzer
-    from analysis.network_topology import NetworkTopologyAnalyzer
+    # Using relative imports for better module resolution
+    from .analysis.ddqn import DDQNAgent, normalize_state, create_mitigation_action
+    from .analysis.traffic_analyzer import TrafficAnalyzer
+    from .analysis.network_topology import NetworkTopologyAnalyzer
     print("Successfully imported analysis modules")
 except ImportError as e:
-    print(f"Warning: Could not import analysis modules: {e}")
-    # Create placeholder classes for development
-    class DDQNAgent:
-        def __init__(self, *args, **kwargs):
-            print("Using placeholder DDQNAgent")
-        
-        def act(self, state):
-            return 0
-    
-    class TrafficAnalyzer:
-        def __init__(self, *args, **kwargs):
-            print("Using placeholder TrafficAnalyzer")
-        
-        def generate_analysis_data(self):
-            return {"error": "Analysis modules not available"}
-    
-    class NetworkTopologyAnalyzer:
-        def __init__(self):
-            print("Using placeholder NetworkTopologyAnalyzer")
-        
-        def get_topology(self):
-            return {"nodes": [], "links": []}
+    try:
+        # Try direct imports as fallback
+        from analysis.ddqn import DDQNAgent, normalize_state, create_mitigation_action
+        from analysis.traffic_analyzer import TrafficAnalyzer
+        from analysis.network_topology import NetworkTopologyAnalyzer
+        print("Successfully imported analysis modules via direct import")
+    except ImportError as e2:
+        print(f"Warning: Could not import analysis modules: {e2}")
+        # We'll use the placeholder classes defined above
 
 # Initialize analysis components
 analyzer = TrafficAnalyzer()
@@ -63,8 +127,8 @@ try:
     # Generate default network topology if it doesn't exist
     topology_analyzer.generate_default_topology()
     print("Generated default network topology")
-except:
-    print("Warning: Could not generate default network topology")
+except Exception as e:
+    print(f"Warning: Could not generate default network topology: {e}")
 
 @app.route('/api/python/status', methods=['GET'])
 def get_status():
@@ -120,7 +184,7 @@ def get_traffic_paths():
 def mitigate_attack():
     """Take mitigation action against an attack"""
     try:
-        data = request.json
+        data = request.json or {}
         state = data.get('state', [0.5] * 8)  # Default state if none provided
         normalized_state = normalize_state(state)
         
@@ -144,7 +208,7 @@ def mitigate_attack():
 def simulate_attack():
     """Simulate a DDoS attack for testing"""
     try:
-        data = request.json
+        data = request.json or {}
         attack_type = data.get('attack_type', 'tcp_syn_flood')
         duration = data.get('duration', 60)  # seconds
         intensity = data.get('intensity', 0.7)  # 0-1 scale

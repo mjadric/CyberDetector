@@ -6,6 +6,12 @@ import path from "path";
 import { z } from "zod";
 import fs from "fs";
 import axios from "axios";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+// Get current directory equivalent in ES module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Python backend API URL
 const PYTHON_API_URL = "http://localhost:5001";

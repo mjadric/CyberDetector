@@ -5,15 +5,49 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTheme } from "@/hooks/use-theme";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 export default function Settings() {
+  // Settings state
   const { theme, setTheme } = useTheme();
-  const [apiEndpoint, setApiEndpoint] = useState("http://localhost:8000");
+  const [apiEndpoint, setApiEndpoint] = useState("http://localhost:5000");
   const [refreshInterval, setRefreshInterval] = useState("30");
   const [alertNotifications, setAlertNotifications] = useState(true);
   const [emailAlerts, setEmailAlerts] = useState(false);
   const [emailAddress, setEmailAddress] = useState("");
+  
+  // Python backend status
+  const [pythonApiStatus, setPythonApiStatus] = useState<'loading' | 'online' | 'offline'>('loading');
+  const [pythonApiDetails, setPythonApiDetails] = useState<any>(null);
+  
+  // Check Python API status on component mount
+  useEffect(() => {
+    checkPythonApiStatus();
+  }, []);
+  
+  // Function to check Python API status
+  const checkPythonApiStatus = async () => {
+    setPythonApiStatus('loading');
+    try {
+      const response = await fetch('/api/python-status');
+      const data = await response.json();
+      
+      if (data.available) {
+        setPythonApiStatus('online');
+        setPythonApiDetails(data.status);
+      } else {
+        setPythonApiStatus('offline');
+        setPythonApiDetails(null);
+      }
+    } catch (error) {
+      console.error('Error checking Python API status:', error);
+      setPythonApiStatus('offline');
+      setPythonApiDetails(null);
+    }
+  };
   
   return (
     <div className="mt-8 space-y-6">
