@@ -9,11 +9,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { BellIcon, User } from "lucide-react";
-import { useTheme } from "@/hooks/use-theme";
+import { BellIcon, User, Moon, Sun } from "lucide-react";
 
 export default function Header() {
-  const { theme, setTheme } = useTheme();
+  // Privremeno koristimo samo varijablu za temu dok ne popravimo useTheme
+  const theme = 'dark'; // default tema
   const [location] = useLocation();
   
   return (
@@ -115,8 +115,11 @@ export default function Header() {
                   <div className="w-full cursor-pointer">Settings</div>
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-                {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+              <DropdownMenuItem>
+                <div className="flex items-center">
+                  {theme === 'dark' ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
+                  {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                </div>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem>Log out</DropdownMenuItem>
