@@ -169,6 +169,21 @@ export async function closeMongoDB() {
 }
 
 /**
+ * Calculate entropy of a set of values
+ */
+export function calculateEntropy(values: string[]): number {
+  const valueFrequency: Record<string, number> = {};
+  values.forEach(value => {
+    valueFrequency[value] = (valueFrequency[value] || 0) + 1;
+  });
+  
+  return Object.values(valueFrequency).reduce((entropy, freq) => {
+    const p = freq / values.length;
+    return entropy - p * Math.log2(p);
+  }, 0);
+}
+
+/**
  * Create time-series aggregation for DDQN input
  * This function will aggregate packet data into time windows for the DDQN model
  */
@@ -214,19 +229,6 @@ export async function aggregateTimeSeriesData(intervalMinutes: number = 5): Prom
     ).length;
     
     const synRatio = protocolCounts.tcp > 0 ? synCount / protocolCounts.tcp : 0;
-    
-    // Calculate entropy (simplified)
-    function calculateEntropy(values: string[]): number {
-      const valueFrequency: Record<string, number> = {};
-      values.forEach(value => {
-        valueFrequency[value] = (valueFrequency[value] || 0) + 1;
-      });
-      
-      return Object.values(valueFrequency).reduce((entropy, freq) => {
-        const p = freq / values.length;
-        return entropy - p * Math.log2(p);
-      }, 0);
-    }
     
     const entropySrcIp = calculateEntropy(packets.map(p => p.source_ip));
     const entropyDestIp = calculateEntropy(packets.map(p => p.destination_ip));
