@@ -40,25 +40,24 @@ export async function connectToPostgres(): Promise<boolean> {
     if (isSupabase) {
       log('Detected Supabase connection', 'postgres');
       
-      // For Supabase, since we might have connection issues with direct DB access from Replit
-      // Let's log what we're trying to do but proceed cautiously
-      log('Note: Connecting to Supabase from Replit might encounter network restrictions', 'postgres');
-      log('Using fallback mechanisms if direct connection fails', 'postgres');
-      
       try {
-        // Try a test connection first 
-        const testSql = neon('postgres://postgres:test@localhost:5432/postgres');
-        await testSql`SELECT 1`;
-      } catch (testError) {
-        log('Test connection failed as expected, continuing with actual connection attempt', 'postgres');
-      }
-      
-      // Try to connect with original URL
-      try {
-        // Keep URL as is, might be restricted by Supabase network policies
-        log(`Attempting connection to ${connectionUrl.split('@')[1].split('/')[0]}`, 'postgres');
+        // Extract the hostname for logging purposes only
+        const hostname = connectionUrl.includes('@') ? 
+          connectionUrl.split('@')[1].split('/')[0] : 
+          'unknown';
+        log(`Attempting connection to ${hostname}`, 'postgres');
+        
+        // Format URL correctly for Supabase using DIRECT CONNECTION format
+        // Add sslmode=require for secure connection
+        if (!connectionUrl.includes('sslmode=')) {
+          connectionUrl += connectionUrl.includes('?') ? 
+            '&sslmode=require' : 
+            '?sslmode=require';
+        }
+        
+        log('Added SSL mode requirement for Supabase connection', 'postgres');
       } catch (e) {
-        log('Error parsing connection URL', 'postgres');
+        log(`Error parsing connection URL: ${e}`, 'postgres');
       }
     }
     
@@ -103,90 +102,128 @@ export async function connectToPostgres(): Promise<boolean> {
 async function createTables() {
   if (!sql) return;
   
-  // We'll use raw SQL queries for table creation since Drizzle 
-  // doesn't have a built-in migration system in serverless mode
-  
-  // Create network_metrics table
-  await sql`
-    CREATE TABLE IF NOT EXISTS network_metrics (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      value VARCHAR(255) NOT NULL,
-      change_percent DECIMAL(5,2),
-      trend VARCHAR(50),
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `;
-  
-  // Create network_traffic table
-  await sql`
-    CREATE TABLE IF NOT EXISTS network_traffic (
-      id SERIAL PRIMARY KEY,
-      source_ip VARCHAR(255) NOT NULL,
-      destination_ip VARCHAR(255) NOT NULL,
-      protocol VARCHAR(50) NOT NULL,
-      packet_size INTEGER NOT NULL,
-      timestamp TIMESTAMPTZ DEFAULT NOW(),
-      is_anomaly BOOLEAN DEFAULT FALSE,
-      anomaly_score DECIMAL(5,2)
-    )
-  `;
-  
-  // Create alerts table
-  await sql`
-    CREATE TABLE IF NOT EXISTS alerts (
-      id SERIAL PRIMARY KEY,
-      time VARCHAR(255) NOT NULL,
-      type VARCHAR(255) NOT NULL,
-      source_ip VARCHAR(255),
-      destination_ip VARCHAR(255),
-      severity VARCHAR(50) NOT NULL,
-      is_acknowledged BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `;
-  
-  // Create traffic_paths table
-  await sql`
-    CREATE TABLE IF NOT EXISTS traffic_paths (
-      id SERIAL PRIMARY KEY,
-      path_id VARCHAR(255) NOT NULL,
-      source VARCHAR(255) NOT NULL,
-      destination VARCHAR(255) NOT NULL,
-      hop_count INTEGER NOT NULL,
-      status VARCHAR(50) NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `;
-  
-  // Create network_nodes table
-  await sql`
-    CREATE TABLE IF NOT EXISTS network_nodes (
-      id SERIAL PRIMARY KEY,
-      node_id VARCHAR(255) UNIQUE NOT NULL,
-      name VARCHAR(255) NOT NULL,
-      type VARCHAR(50) NOT NULL,
-      ip_address VARCHAR(255),
-      x DECIMAL(10,2),
-      y DECIMAL(10,2),
-      status VARCHAR(50) DEFAULT 'active',
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `;
-  
-  // Create network_links table
-  await sql`
-    CREATE TABLE IF NOT EXISTS network_links (
-      id SERIAL PRIMARY KEY,
-      source VARCHAR(255) NOT NULL,
-      target VARCHAR(255) NOT NULL,
-      status VARCHAR(50) DEFAULT 'active',
-      bandwidth VARCHAR(50),
-      latency INTEGER,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(source, target)
-    )
-  `;
+  try {
+    log('Creating database tables in PostgreSQL...', 'postgres');
+    
+    // Use @neondatabase/serverless to create tables
+    // Create tables with better error handling
+    
+    // Create network_metrics table
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS network_metrics (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          value VARCHAR(255) NOT NULL,
+          change_percent DECIMAL(5,2),
+          trend VARCHAR(50),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `;
+      log('Created network_metrics table', 'postgres');
+    } catch (error) {
+      log(`Error creating network_metrics table: ${error}`, 'postgres');
+    }
+    
+    // Create network_traffic table
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS network_traffic (
+          id SERIAL PRIMARY KEY,
+          source_ip VARCHAR(255) NOT NULL,
+          destination_ip VARCHAR(255) NOT NULL,
+          protocol VARCHAR(50) NOT NULL,
+          packet_size INTEGER NOT NULL,
+          timestamp TIMESTAMPTZ DEFAULT NOW(),
+          is_anomaly BOOLEAN DEFAULT FALSE,
+          anomaly_score DECIMAL(5,2)
+        )
+      `;
+      log('Created network_traffic table', 'postgres');
+    } catch (error) {
+      log(`Error creating network_traffic table: ${error}`, 'postgres');
+    }
+    
+    // Create alerts table
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS alerts (
+          id SERIAL PRIMARY KEY,
+          time VARCHAR(255) NOT NULL,
+          type VARCHAR(255) NOT NULL,
+          source_ip VARCHAR(255),
+          destination_ip VARCHAR(255),
+          severity VARCHAR(50) NOT NULL,
+          is_acknowledged BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `;
+      log('Created alerts table', 'postgres');
+    } catch (error) {
+      log(`Error creating alerts table: ${error}`, 'postgres');
+    }
+    
+    // Create traffic_paths table
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS traffic_paths (
+          id SERIAL PRIMARY KEY,
+          path_id VARCHAR(255) NOT NULL,
+          source VARCHAR(255) NOT NULL,
+          destination VARCHAR(255) NOT NULL,
+          hop_count INTEGER NOT NULL,
+          status VARCHAR(50) NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `;
+      log('Created traffic_paths table', 'postgres');
+    } catch (error) {
+      log(`Error creating traffic_paths table: ${error}`, 'postgres');
+    }
+    
+    // Create network_nodes table
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS network_nodes (
+          id SERIAL PRIMARY KEY,
+          node_id VARCHAR(255) UNIQUE NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          type VARCHAR(50) NOT NULL,
+          ip_address VARCHAR(255),
+          x DECIMAL(10,2),
+          y DECIMAL(10,2),
+          status VARCHAR(50) DEFAULT 'active',
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `;
+      log('Created network_nodes table', 'postgres');
+    } catch (error) {
+      log(`Error creating network_nodes table: ${error}`, 'postgres');
+    }
+    
+    // Create network_links table
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS network_links (
+          id SERIAL PRIMARY KEY,
+          source VARCHAR(255) NOT NULL,
+          target VARCHAR(255) NOT NULL,
+          status VARCHAR(50) DEFAULT 'active',
+          bandwidth VARCHAR(50),
+          latency INTEGER,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(source, target)
+        )
+      `;
+      log('Created network_links table', 'postgres');
+    } catch (error) {
+      log(`Error creating network_links table: ${error}`, 'postgres');
+    }
+    
+    log('Finished creating PostgreSQL tables', 'postgres');
+  } catch (error) {
+    log(`Error in createTables: ${error}`, 'postgres');
+  }
 }
 
 /**
