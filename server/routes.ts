@@ -89,24 +89,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { db } = await import('./db');
       
-      // Get table names from information_schema
-      const tablesQuery = await db.execute(
-        `SELECT table_name FROM information_schema.tables 
-         WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`
-      );
-      
-      const tableNames = tablesQuery.rows.map((row: any) => row.table_name);
-      
-      // Get limited rows from each table
+      // Direktno dohvaćamo podatke iz definiranih tablica u shemi
       const data: Record<string, any[]> = {};
       
+      // Popis tablica za koje znamo da postoje
+      const tableNames = [
+        'users', 
+        'network_traffic', 
+        'alerts', 
+        'network_metrics',
+        'dashboard_metrics', 
+        'traffic_paths',
+        'network_nodes',
+        'network_links'
+      ];
+      
       for (const tableName of tableNames) {
-        // Limit to 20 rows per table
-        const rows = await db.execute(
-          `SELECT * FROM "${tableName}" LIMIT 20`
-        );
-        
-        data[tableName] = rows.rows;
+        try {
+          // Ovo je jednostavnije - koristimo direktno select()
+          const rows = await db.select().from(tableName).limit(10);
+          data[tableName] = rows || [];
+        } catch (err) {
+          // Nastavljamo s drugim tablicama ako jedna ne postoji
+          console.log(`Tablica ${tableName} nije dostupna: ${err}`);
+          data[tableName] = [];
+        }
       }
       
       res.json({ tables: data });
