@@ -451,85 +451,328 @@ export class MemStorage implements IStorage {
   
   // Network metrics
   async getLatestNetworkMetrics(): Promise<any> {
-    // Try to use PostgreSQL if available
-    if (dbStatus.postgresConnected) {
-      try {
-        const metrics = await pgGetNetworkMetrics();
-        if (metrics.length > 0) {
-          return metrics;
-        }
-      } catch (error) {
-        log(`PostgreSQL error getting metrics: ${error}`, 'storage');
-      }
-    }
-    
-    // Otherwise use MongoDB for some metrics if available
-    if (dbStatus.mongoConnected) {
-      try {
-        // Count recent traffic
-        const now = new Date();
-        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-        
-        const totalTraffic = await networkTrafficCollection.countDocuments({
-          timestamp: { $gte: oneHourAgo }
-        });
-        
-        const anomalyTraffic = await networkTrafficCollection.countDocuments({
-          timestamp: { $gte: oneHourAgo },
-          is_anomaly: true
-        });
-        
-        const activeAttacks = await attackEventsCollection.countDocuments({
-          mitigated: false
-        });
-        
-        // If we have some data, return MongoDB-based metrics
-        if (totalTraffic > 0) {
-          const metrics = [
-            { 
-              id: 1, 
-              name: "Network Load", 
-              value: `${Math.min(99, Math.round(totalTraffic / 10))}%`, 
-              change: "+15%", 
-              icon: "device_hub", 
-              color: "text-[#3B82F6]" 
-            },
-            { 
-              id: 2, 
-              name: "Packet Rate", 
-              value: `${Math.round(totalTraffic / 6) / 10}K/s`, 
-              change: "+8%", 
-              icon: "speed", 
-              color: "text-[#10B981]" 
-            },
-            { 
-              id: 3, 
-              name: "Threat Level", 
-              value: activeAttacks > 0 ? "High" : "Low", 
-              change: activeAttacks > 0 ? "+23%" : "-5%", 
-              icon: "security", 
-              color: activeAttacks > 0 ? "text-[#F59E0B]" : "text-[#10B981]" 
-            },
-            { 
-              id: 4, 
-              name: "Blocked Attacks", 
-              value: anomalyTraffic.toString(), 
-              change: "98%", 
-              icon: "gpp_good", 
-              color: "text-[#5D3FD3]" 
-            }
-          ];
+    try {
+      // STEP 1: Try to get metrics from PostgreSQL
+      if (dbStatus.postgresConnected) {
+        try {
+          // Check if we have metrics in PostgreSQL
+          const pgMetrics = await pgGetNetworkMetrics();
           
-          log('Using MongoDB data for network metrics', 'storage');
-          return metrics;
+          // If we have data in PostgreSQL, use it
+          if (pgMetrics.length > 0) {
+            // Format database metrics for frontend display
+            const formattedMetrics = pgMetrics.map((metric, index) => {
+              // Generate appropriate icon and color based on metric name
+              let icon = 'device_hub';
+              let color = 'text-[#3B82F6]';
+              
+              if (metric.name.includes('Packet')) {
+                icon = 'speed';
+                color = 'text-[#10B981]';
+              } else if (metric.name.includes('Threat')) {
+                icon = 'security';
+                color = metric.value === 'High' ? 'text-[#F59E0B]' : 'text-[#10B981]';
+              } else if (metric.name.includes('Blocked') || metric.name.includes('Attacks')) {
+                icon = 'gpp_good';
+                color = 'text-[#5D3FD3]';
+              }
+              
+              // Format trend as change string
+              const changeStr = metric.trend === 'up' 
+                ? `+${metric.change_percent?.toFixed(0) || 0}%` 
+                : metric.trend === 'down' 
+                  ? `-${metric.change_percent?.toFixed(0) || 0}%` 
+                  : '0%';
+              
+              return {
+                id: index + 1,
+                name: metric.name,
+                value: metric.value,
+                change: changeStr,
+                icon,
+                color
+              };
+            });
+            
+            log('Using PostgreSQL data for network metrics', 'storage');
+            return formattedMetrics;
+          } else {
+            // Seed PostgreSQL with metrics from MongoDB if possible
+            if (dbStatus.mongoConnected) {
+              await this.seedPostgreSQLMetricsFromMongoDB();
+            } else {
+              await this.seedPostgreSQLMetrics();
+            }
+            
+            // Try again after seeding
+            const newPgMetrics = await pgGetNetworkMetrics();
+            if (newPgMetrics.length > 0) {
+              log('Using newly seeded PostgreSQL data for network metrics', 'storage');
+              
+              // Format the same way as above
+              const formattedMetrics = newPgMetrics.map((metric, index) => {
+                let icon = 'device_hub';
+                let color = 'text-[#3B82F6]';
+                
+                if (metric.name.includes('Packet')) {
+                  icon = 'speed';
+                  color = 'text-[#10B981]';
+                } else if (metric.name.includes('Threat')) {
+                  icon = 'security';
+                  color = metric.value === 'High' ? 'text-[#F59E0B]' : 'text-[#10B981]';
+                } else if (metric.name.includes('Blocked') || metric.name.includes('Attacks')) {
+                  icon = 'gpp_good';
+                  color = 'text-[#5D3FD3]';
+                }
+                
+                const changeStr = metric.trend === 'up' 
+                  ? `+${metric.change_percent?.toFixed(0) || 0}%` 
+                  : metric.trend === 'down' 
+                    ? `-${metric.change_percent?.toFixed(0) || 0}%` 
+                    : '0%';
+                
+                return {
+                  id: index + 1,
+                  name: metric.name,
+                  value: metric.value,
+                  change: changeStr,
+                  icon,
+                  color
+                };
+              });
+              
+              return formattedMetrics;
+            }
+          }
+        } catch (error) {
+          log(`PostgreSQL error getting metrics: ${error}`, 'storage');
         }
-      } catch (error) {
-        log(`MongoDB error getting metrics: ${error}`, 'storage');
       }
+      
+      // STEP 2: Fall back to MongoDB-based metrics
+      if (dbStatus.mongoConnected) {
+        try {
+          // Count recent traffic
+          const now = new Date();
+          const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+          
+          const totalTraffic = await networkTrafficCollection.countDocuments({
+            timestamp: { $gte: oneHourAgo }
+          });
+          
+          const anomalyTraffic = await networkTrafficCollection.countDocuments({
+            timestamp: { $gte: oneHourAgo },
+            is_anomaly: true
+          });
+          
+          const activeAttacks = await attackEventsCollection.countDocuments({
+            mitigated: false
+          });
+          
+          // Generate metrics from real MongoDB data
+          if (totalTraffic > 0) {
+            const metrics = [
+              { 
+                id: 1, 
+                name: "Network Load", 
+                value: `${Math.min(99, Math.round(totalTraffic / 10))}%`, 
+                change: "+15%", 
+                icon: "device_hub", 
+                color: "text-[#3B82F6]" 
+              },
+              { 
+                id: 2, 
+                name: "Packet Rate", 
+                value: `${Math.round(totalTraffic / 6) / 10}K/s`, 
+                change: "+8%", 
+                icon: "speed", 
+                color: "text-[#10B981]" 
+              },
+              { 
+                id: 3, 
+                name: "Threat Level", 
+                value: activeAttacks > 0 ? "High" : "Low", 
+                change: activeAttacks > 0 ? "+23%" : "-5%", 
+                icon: "security", 
+                color: activeAttacks > 0 ? "text-[#F59E0B]" : "text-[#10B981]" 
+              },
+              { 
+                id: 4, 
+                name: "Blocked Attacks", 
+                value: anomalyTraffic.toString(), 
+                change: "98%", 
+                icon: "gpp_good", 
+                color: "text-[#5D3FD3]" 
+              }
+            ];
+            
+            // If PostgreSQL is available, save these for future use
+            if (dbStatus.postgresConnected) {
+              try {
+                const dbMetrics = [
+                  { 
+                    name: "Network Load", 
+                    value: `${Math.min(99, Math.round(totalTraffic / 10))}%`, 
+                    trend: "up",
+                    change_percent: 15.0
+                  },
+                  { 
+                    name: "Packet Rate", 
+                    value: `${Math.round(totalTraffic / 6) / 10}K/s`, 
+                    trend: "up",
+                    change_percent: 8.0
+                  },
+                  { 
+                    name: "Threat Level", 
+                    value: activeAttacks > 0 ? "High" : "Low", 
+                    trend: activeAttacks > 0 ? "up" : "down",
+                    change_percent: activeAttacks > 0 ? 23.0 : 5.0
+                  },
+                  { 
+                    name: "Blocked Attacks", 
+                    value: anomalyTraffic.toString(), 
+                    trend: "up",
+                    change_percent: 98.0
+                  }
+                ];
+                
+                // Insert into PostgreSQL
+                for (const metric of dbMetrics) {
+                  await pgInsertNetworkMetric(metric);
+                }
+                
+                log('Saved MongoDB-derived metrics to PostgreSQL', 'storage');
+              } catch (pgError) {
+                log(`Error saving metrics to PostgreSQL: ${pgError}`, 'storage');
+              }
+            }
+            
+            log('Using MongoDB data for network metrics', 'storage');
+            return metrics;
+          }
+        } catch (error) {
+          log(`MongoDB error getting metrics: ${error}`, 'storage');
+        }
+      }
+      
+      // STEP 3: Fallback to mock data only if both databases fail
+      log('Using mock data for network metrics', 'storage');
+      return this.networkMetrics;
+    } catch (error) {
+      log(`Error in getLatestNetworkMetrics: ${error}`, 'storage');
+      return this.networkMetrics;
     }
+  }
+  
+  /**
+   * Seed PostgreSQL with metrics data from MongoDB
+   */
+  private async seedPostgreSQLMetricsFromMongoDB(): Promise<void> {
+    if (!dbStatus.postgresConnected || !dbStatus.mongoConnected) return;
     
-    // Fallback to mock data
-    return this.networkMetrics;
+    try {
+      // Count recent traffic in MongoDB
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      
+      const totalTraffic = await networkTrafficCollection.countDocuments({
+        timestamp: { $gte: oneHourAgo }
+      });
+      
+      const anomalyTraffic = await networkTrafficCollection.countDocuments({
+        timestamp: { $gte: oneHourAgo },
+        is_anomaly: true
+      });
+      
+      const activeAttacks = await attackEventsCollection.countDocuments({
+        mitigated: false
+      });
+      
+      if (totalTraffic > 0) {
+        // Create metrics based on MongoDB data
+        const dbMetrics = [
+          { 
+            name: "Network Load", 
+            value: `${Math.min(99, Math.round(totalTraffic / 10))}%`, 
+            trend: "up",
+            change_percent: 15.0
+          },
+          { 
+            name: "Packet Rate", 
+            value: `${Math.round(totalTraffic / 6) / 10}K/s`, 
+            trend: "up",
+            change_percent: 8.0
+          },
+          { 
+            name: "Threat Level", 
+            value: activeAttacks > 0 ? "High" : "Low", 
+            trend: activeAttacks > 0 ? "up" : "down",
+            change_percent: activeAttacks > 0 ? 23.0 : 5.0
+          },
+          { 
+            name: "Blocked Attacks", 
+            value: anomalyTraffic.toString(), 
+            trend: "up",
+            change_percent: 98.0
+          }
+        ];
+        
+        // Insert into PostgreSQL
+        for (const metric of dbMetrics) {
+          await pgInsertNetworkMetric(metric);
+        }
+        
+        log('Seeded PostgreSQL with metrics from MongoDB data', 'storage');
+      }
+    } catch (error) {
+      log(`Error seeding PostgreSQL from MongoDB: ${error}`, 'storage');
+    }
+  }
+  
+  /**
+   * Seed PostgreSQL with initial metrics data
+   */
+  private async seedPostgreSQLMetrics(): Promise<void> {
+    if (!dbStatus.postgresConnected) return;
+    
+    try {
+      // Create some initial metrics data
+      const dbMetrics = [
+        { 
+          name: "Network Load", 
+          value: "42%", 
+          trend: "up",
+          change_percent: 15.0
+        },
+        { 
+          name: "Packet Rate", 
+          value: "8.5K/s", 
+          trend: "up",
+          change_percent: 8.0
+        },
+        { 
+          name: "Threat Level", 
+          value: "Medium", 
+          trend: "up",
+          change_percent: 23.0
+        },
+        { 
+          name: "Blocked Attacks", 
+          value: "12", 
+          trend: "up",
+          change_percent: 98.0
+        }
+      ];
+      
+      // Insert into PostgreSQL
+      for (const metric of dbMetrics) {
+        await pgInsertNetworkMetric(metric);
+      }
+      
+      log('Seeded PostgreSQL with initial metrics data', 'storage');
+    } catch (error) {
+      log(`Error seeding PostgreSQL metrics: ${error}`, 'storage');
+    }
   }
   
   async getTrafficData(): Promise<any> {
@@ -880,6 +1123,46 @@ export class MemStorage implements IStorage {
               status: "Active"
             }
           };
+        } else {
+          // If PostgreSQL tables are empty, seed them with initial data
+          log('PostgreSQL network topology tables are empty. Seeding...', 'storage');
+          await this.seedPostgreSQLTopology();
+          
+          // Try again after seeding
+          const newTopology = await pgGetNetworkTopology();
+          if (newTopology.nodes.length > 0) {
+            log('Using newly seeded PostgreSQL data for network topology', 'storage');
+            
+            // Add structure data
+            const structure = [
+              { 
+                layer: "Core Layer", 
+                devices: `${newTopology.nodes.filter(n => n.type === 'router').length} Router`,
+                status: "Operational" 
+              },
+              { 
+                layer: "Distribution Layer", 
+                devices: `${newTopology.nodes.filter(n => n.type === 'switch').length} Switches`,
+                status: "Operational" 
+              },
+              { 
+                layer: "Access Layer", 
+                devices: `${newTopology.nodes.filter(n => n.type === 'server').length} Servers, ${newTopology.nodes.filter(n => n.type === 'client').length} Hosts`,
+                status: "Operational" 
+              }
+            ];
+            
+            return {
+              ...newTopology,
+              structure,
+              attackDetails: {
+                target: "server-3",
+                type: "TCP SYN Flood",
+                sources: "23 malicious IPs",
+                status: "Active"
+              }
+            };
+          }
         }
       } catch (error) {
         log(`PostgreSQL error getting network topology: ${error}`, 'storage');
@@ -888,6 +1171,142 @@ export class MemStorage implements IStorage {
     
     // Fallback to mock data
     return this.networkTopology;
+  }
+  
+  /**
+   * Seed PostgreSQL with network topology data
+   */
+  private async seedPostgreSQLTopology(): Promise<void> {
+    if (!dbStatus.postgresConnected) return;
+    
+    try {
+      // Create some sample nodes
+      const nodes = [
+        {
+          node_id: 'router-1',
+          name: 'Core Router',
+          type: 'router',
+          ip_address: '10.0.0.1',
+          x: 50,
+          y: 50,
+          status: 'active'
+        },
+        {
+          node_id: 'switch-1',
+          name: 'Distribution Switch 1',
+          type: 'switch',
+          ip_address: '10.0.1.1',
+          x: 20,
+          y: 80,
+          status: 'active'
+        },
+        {
+          node_id: 'switch-2',
+          name: 'Distribution Switch 2',
+          type: 'switch',
+          ip_address: '10.0.2.1',
+          x: 80,
+          y: 80,
+          status: 'active'
+        },
+        {
+          node_id: 'server-1',
+          name: 'Web Server',
+          type: 'server',
+          ip_address: '10.0.1.10',
+          x: 10,
+          y: 120,
+          status: 'active'
+        },
+        {
+          node_id: 'server-2',
+          name: 'Database Server',
+          type: 'server',
+          ip_address: '10.0.1.11',
+          x: 30,
+          y: 120,
+          status: 'active'
+        },
+        {
+          node_id: 'server-3',
+          name: 'Application Server',
+          type: 'server',
+          ip_address: '10.0.2.10',
+          x: 70,
+          y: 120,
+          status: 'active'
+        },
+        {
+          node_id: 'server-4',
+          name: 'Backup Server',
+          type: 'server',
+          ip_address: '10.0.2.11',
+          x: 90,
+          y: 120,
+          status: 'warning'
+        }
+      ];
+      
+      // Create links between nodes
+      const links = [
+        {
+          source: 'router-1',
+          target: 'switch-1',
+          status: 'active',
+          bandwidth: '1Gbps',
+          latency: 2
+        },
+        {
+          source: 'router-1',
+          target: 'switch-2',
+          status: 'active',
+          bandwidth: '1Gbps',
+          latency: 2
+        },
+        {
+          source: 'switch-1',
+          target: 'server-1',
+          status: 'active',
+          bandwidth: '1Gbps',
+          latency: 1
+        },
+        {
+          source: 'switch-1',
+          target: 'server-2',
+          status: 'active',
+          bandwidth: '1Gbps',
+          latency: 1
+        },
+        {
+          source: 'switch-2',
+          target: 'server-3',
+          status: 'active',
+          bandwidth: '1Gbps',
+          latency: 1
+        },
+        {
+          source: 'switch-2',
+          target: 'server-4',
+          status: 'warning',
+          bandwidth: '100Mbps',
+          latency: 5
+        }
+      ];
+      
+      // Insert nodes into PostgreSQL
+      for (const node of nodes) {
+        await pgInsertNetworkNode(node);
+      }
+      
+      // Insert links into PostgreSQL
+      for (const link of links) {
+        await pgInsertNetworkLink(link);
+      }
+      
+      log('Seeded PostgreSQL with network topology data', 'storage');
+    } catch (error) {
+      log(`Error seeding PostgreSQL topology: ${error}`, 'storage');
+    }
   }
   
   async getTrafficPaths(): Promise<any> {
