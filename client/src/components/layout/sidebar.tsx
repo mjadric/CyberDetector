@@ -1,66 +1,62 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
-export default function Sidebar() {
+interface SidebarProps {
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+export default function Sidebar({ isExpanded, onToggle }: SidebarProps) {
   const [location] = useLocation();
   
   const isActive = (path: string) => location === path;
+
+  const menuItems = [
+    { path: "/", icon: "dashboard", label: "Dashboard" },
+    { path: "/analysis", icon: "analytics", label: "Analysis" },
+    { path: "/simulation", icon: "hub", label: "Simulation" },
+    { path: "/detection", icon: "security", label: "Detection" },
+    { path: "/database", icon: "storage", label: "Database" },
+    { path: "/settings", icon: "settings", label: "Settings" }
+  ];
   
   return (
-    <div className="w-16 flex flex-col items-center py-4 bg-card">
-      <Link href="/">
-        <div className={cn(
-          "p-3 rounded-md mb-2 cursor-pointer",
-          isActive("/") ? "text-white bg-primary" : "text-muted-foreground hover:text-foreground"
-        )}>
-          <span className="material-icons">dashboard</span>
-        </div>
-      </Link>
+    <div className={cn(
+      "flex flex-col py-4 bg-card shadow-md transition-all duration-300 ease-in-out h-full",
+      isExpanded ? "w-56" : "w-16"
+    )}>
+      <button 
+        onClick={onToggle}
+        className="self-end mr-4 mb-4 text-muted-foreground hover:text-foreground"
+      >
+        <span className="material-icons">
+          {isExpanded ? "chevron_left" : "chevron_right"}
+        </span>
+      </button>
       
-      <Link href="/analysis">
-        <div className={cn(
-          "p-3 rounded-md mb-2 cursor-pointer",
-          isActive("/analysis") ? "text-white bg-primary" : "text-muted-foreground hover:text-foreground"
-        )}>
-          <span className="material-icons">analytics</span>
-        </div>
-      </Link>
-      
-      <Link href="/simulation">
-        <div className={cn(
-          "p-3 rounded-md mb-2 cursor-pointer",
-          isActive("/simulation") ? "text-white bg-primary" : "text-muted-foreground hover:text-foreground"
-        )}>
-          <span className="material-icons">hub</span>
-        </div>
-      </Link>
-      
-      <Link href="/detection">
-        <div className={cn(
-          "p-3 rounded-md mb-2 cursor-pointer",
-          isActive("/detection") ? "text-white bg-primary" : "text-muted-foreground hover:text-foreground"
-        )}>
-          <span className="material-icons">security</span>
-        </div>
-      </Link>
-      
-      <Link href="/database">
-        <div className={cn(
-          "p-3 rounded-md mb-2 cursor-pointer",
-          isActive("/database") ? "text-white bg-primary" : "text-muted-foreground hover:text-foreground"
-        )}>
-          <span className="material-icons">storage</span>
-        </div>
-      </Link>
-      
-      <Link href="/settings">
-        <div className={cn(
-          "p-3 rounded-md mb-2 cursor-pointer",
-          isActive("/settings") ? "text-white bg-primary" : "text-muted-foreground hover:text-foreground"
-        )}>
-          <span className="material-icons">settings</span>
-        </div>
-      </Link>
+      <div className="flex flex-col items-center">
+        {menuItems.map((item) => (
+          <Link href={item.path} key={item.path}>
+            <div 
+              className={cn(
+                "flex items-center p-3 rounded-md mb-2 cursor-pointer transition-colors w-full",
+                isExpanded ? "mx-3 px-4 justify-start" : "justify-center",
+                isActive(item.path) 
+                  ? "text-white bg-primary" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+              )}
+            >
+              <span className="material-icons">
+                {item.icon}
+              </span>
+              {isExpanded && (
+                <span className="ml-3">{item.label}</span>
+              )}
+            </div>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
