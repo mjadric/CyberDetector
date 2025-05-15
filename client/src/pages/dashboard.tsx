@@ -8,30 +8,15 @@ import AlertHistory from "@/components/dashboard/alert-history";
 import IpAnalysis from "@/components/dashboard/ip-analysis";
 import { Button } from "@/components/ui/button";
 import { Calendar, RefreshCw } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export default function Dashboard() {
   const [timeRange, setTimeRange] = useState("Last 24 hours");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(5000); // 5 sekundi
   
-  // Automatsko osvježavanje podataka u zadanom intervalu
-  useEffect(() => {
-    let intervalId: number;
-    
-    if (autoRefresh) {
-      intervalId = window.setInterval(() => {
-        console.log("Automatsko osvježavanje podataka...");
-        handleRefresh();
-      }, refreshInterval);
-    }
-    
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [autoRefresh, refreshInterval]);
+  // Koristimo automatsko osvježavanje preko React Query 
+  // Nema potrebe za dodatnim setInterval-om
   
   const { data: metrics, isLoading: isLoadingMetrics } = useQuery({
     queryKey: ['/api/metrics'],
