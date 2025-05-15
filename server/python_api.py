@@ -775,33 +775,113 @@ class NetworkTrafficSimulator:
         # Save to MongoDB if available
         if MONGO_AVAILABLE:
             try:
-                client = MongoClient(os.environ.get('MONGODB_URI', 'mongodb://localhost:27017'))
-                db = client.get_database('ddos_defender')
-                traffic_collection = db.get_collection('network_traffic')
+                # Create packet data
+                packet_data = []
+                duration_seconds = duration
+                base_time = datetime.now()
+                packet_rate = int(attack_state["packet_rate"] * 5000)
                 
-                # Create traffic document
-                traffic_doc = {
-                    "timestamp": datetime.now(),
-                    "source_entropy": attack_state["source_entropy"],
-                    "destination_entropy": attack_state["destination_entropy"],
-                    "syn_ratio": attack_state["syn_ratio"],
-                    "traffic_volume": attack_state["traffic_volume"],
-                    "packet_rate": attack_state["packet_rate"],
-                    "unique_src_ips": attack_state["unique_src_ips"],
-                    "unique_dst_ips": attack_state["unique_dst_ips"],
-                    "protocol_distribution": attack_state["protocol_distribution"],
-                    "traffic_type": attack_type,
-                    "is_attack": True,
-                    "intensity": intensity,
-                    "duration": duration,
-                    "simulated": True
+                # Generate sample source and target IPs
+                src_ips = [f"192.168.{random.randint(1, 254)}.{random.randint(1, 254)}" 
+                          for _ in range(int(attack_state["unique_src_ips"] * 100))]
+                          
+                dst_ips = [f"10.0.{random.randint(1, 10)}.{random.randint(1, 10)}" 
+                          for _ in range(int(attack_state["unique_dst_ips"] * 20))]
+                
+                # Determine protocol distribution based on attack type
+                if attack_type == "syn_flood":
+                    protocol = "TCP"
+                    tcp_flags = "S"
+                elif attack_type == "udp_flood":
+                    protocol = "UDP"
+                    tcp_flags = ""
+                elif attack_type == "icmp_flood":
+                    protocol = "ICMP"
+                    tcp_flags = ""
+                elif attack_type == "http_flood":
+                    protocol = "TCP"
+                    tcp_flags = "PA"
+                else:
+                    protocol = random.choice(["TCP", "UDP", "ICMP"])
+                    tcp_flags = "S" if protocol == "TCP" else ""
+                
+                # Generate packets
+                num_packets = min(1000, packet_rate)  # Limit number of packets for simulation
+                packet_size = random.randint(60, 1500)
+                
+                for i in range(num_packets):
+                    timestamp = base_time + timedelta(milliseconds=random.randint(0, duration_seconds*1000))
+                    src_ip = random.choice(src_ips)
+                    dst_ip = random.choice(dst_ips)
+                    
+                    packet = {
+                        "timestamp": timestamp,
+                        "src_ip": src_ip,
+                        "dst_ip": dst_ip,
+                        "protocol": protocol,
+                        "tcp_flags": tcp_flags,
+                        "packet_size": packet_size,
+                        "is_attack": True,
+                        "attack_type": attack_type,
+                        "simulated": True
+                    }
+                    
+                    packet_data.append(packet)
+                
+                # Store packets in MongoDB
+                store_result = store_packets_batch(packet_data)
+                
+                # Aggregate the traffic data
+                aggregated_data = aggregate_traffic_data(time_window_seconds=1, 
+                                                        start_time=base_time, 
+                                                        end_time=base_time + timedelta(seconds=duration_seconds))
+                
+                # Store the aggregated data
+                agg_result = False
+                if aggregated_data:
+                    agg_result = store_aggregated_data(aggregated_data)
+                
+                # Generate and store attack event
+                attack_event = {
+                    "start_time": base_time,
+                    "end_time": base_time + timedelta(seconds=duration_seconds),
+                    "attack_type": attack_type.upper(),
+                    "severity": int(intensity * 5),  # Scale 1-5
+                    "source_ips": src_ips[:50],  # Limit to 50 IPs to avoid too large documents
+                    "target_ips": dst_ips[:20],  # Limit to 20 IPs
+                    "packet_count": len(packet_data),
+                    "byte_count": len(packet_data) * packet_size,
+                    "detection_features": {
+                        "source_entropy": attack_state["source_entropy"],
+                        "destination_entropy": attack_state["destination_entropy"],
+                        "syn_ratio": attack_state["syn_ratio"],
+                        "traffic_volume": attack_state["traffic_volume"],
+                        "packet_rate": attack_state["packet_rate"]
+                    },
+                    "mitigation_actions": []
                 }
                 
-                # Insert into MongoDB
-                traffic_collection.insert_one(traffic_doc)
+                attack_event_id = store_attack_event(attack_event)
                 
-                client.close()
-                mongodb_saved = True
+                # Store an alert
+                alert_data = {
+                    "timestamp": datetime.now(),
+                    "type": f"{attack_type.upper()}_ATTACK",
+                    "message": f"Detected {attack_type} attack with intensity {intensity:.2f}",
+                    "severity": int(intensity * 5),  # Scale 1-5
+                    "source": "Traffic Simulator",
+                    "details": {
+                        "attack_type": attack_type,
+                        "intensity": intensity,
+                        "duration": duration,
+                        "target_count": len(dst_ips),
+                        "source_count": len(src_ips)
+                    }
+                }
+                
+                alert_id = store_alert(alert_data)
+                
+                mongodb_saved = store_result and (attack_event_id is not None) and (alert_id is not None)
             except Exception as mongo_error:
                 print(f"Error saving simulated traffic to MongoDB: {mongo_error}")
                 mongodb_saved = False
