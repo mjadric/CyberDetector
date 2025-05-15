@@ -210,16 +210,14 @@ async function createTables() {
       await sql`
         CREATE TABLE IF NOT EXISTS network_metrics (
           id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          value VARCHAR(255) NOT NULL,
+          change VARCHAR(255),
+          icon VARCHAR(100),
+          color VARCHAR(100),
           timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          traffic_volume INTEGER NOT NULL,
-          packet_rate INTEGER NOT NULL,
-          syn_ratio REAL NOT NULL,
-          source_entropy REAL NOT NULL,
-          destination_entropy REAL NOT NULL,
-          unique_src_ips INTEGER NOT NULL,
-          unique_dst_ips INTEGER NOT NULL,
-          protocol_distribution JSONB NOT NULL,
-          threat_level VARCHAR(50) NOT NULL
+          trend VARCHAR(50),
+          change_percent DECIMAL(5,2)
         )
       `;
       log('Created network_metrics table', 'postgres');

@@ -42,17 +42,18 @@ export type NetworkTraffic = typeof networkTraffic.$inferSelect;
 // Alerts table
 export const alerts = pgTable("alerts", {
   id: serial("id").primaryKey(),
-  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  time: text("time").notNull(),
   type: text("type").notNull(),
-  source: text("source").notNull(),
-  target: text("target").notNull(),
+  source: text("source_ip"),
+  destination: text("destination_ip"),
   severity: text("severity").notNull(),
-  status: text("status").notNull(),
-  description: text("description"),
+  isAcknowledged: boolean("is_acknowledged").default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const insertAlertSchema = createInsertSchema(alerts).omit({
   id: true,
+  createdAt: true,
 });
 
 export type InsertAlert = z.infer<typeof insertAlertSchema>;
@@ -61,20 +62,19 @@ export type Alert = typeof alerts.$inferSelect;
 // NetworkMetrics table for aggregated data
 export const networkMetrics = pgTable("network_metrics", {
   id: serial("id").primaryKey(),
-  timestamp: timestamp("timestamp").notNull().defaultNow(),
-  trafficVolume: integer("traffic_volume").notNull(),
-  packetRate: integer("packet_rate").notNull(),
-  synRatio: real("syn_ratio").notNull(),
-  sourceEntropy: real("source_entropy").notNull(),
-  destinationEntropy: real("destination_entropy").notNull(),
-  uniqueSrcIps: integer("unique_src_ips").notNull(),
-  uniqueDstIps: integer("unique_dst_ips").notNull(),
-  protocolDistribution: json("protocol_distribution").notNull(),
-  threatLevel: text("threat_level").notNull(),
+  name: text("name").notNull(),
+  value: text("value").notNull(),
+  change: text("change"),
+  icon: text("icon"),
+  color: text("color"),
+  createTime: timestamp("timestamp").notNull().defaultNow(),
+  trend: text("trend"),
+  change_percent: real("change_percent"),
 });
 
 export const insertNetworkMetricsSchema = createInsertSchema(networkMetrics).omit({
   id: true,
+  createTime: true,
 });
 
 export type InsertNetworkMetrics = z.infer<typeof insertNetworkMetricsSchema>;
