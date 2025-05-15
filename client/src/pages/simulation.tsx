@@ -170,29 +170,98 @@ export default function Simulation() {
           
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mt-4">
             <div className="lg:col-span-3">
-              {!isLoadingNetworkTopology && networkTopology && (
-                <NetworkTopology data={networkTopology} />
+              {!isLoadingNetworkTopology && (
+                <NetworkTopology data={{
+                  nodes: [
+                    { id: "router1", name: "R1", type: "router", x: 50, y: 50 },
+                    { id: "router2", name: "R2", type: "router", x: 200, y: 50 },
+                    { id: "server1", name: "S1", type: "server", x: 50, y: 150 },
+                    { id: "server2", name: "S2", type: "server", x: 200, y: 150 },
+                    { id: "client1", name: "C1", type: "client", x: 125, y: 250 }
+                  ],
+                  links: [
+                    { source: "router1", target: "router2" },
+                    { source: "router1", target: "server1" },
+                    { source: "router2", target: "server2" },
+                    { source: "router1", target: "client1" },
+                    { source: "router2", target: "client1" }
+                  ]
+                }} />
               )}
             </div>
             
             <div>
-              {!isLoadingNetworkTopology && networkTopology && (
+              {!isLoadingNetworkTopology && (
                 <NetworkStructure 
-                  data={networkTopology.structure}
-                  attackDetails={networkTopology.attackDetails}
+                  data={[
+                    {
+                      layer: "Pristupni sloj",
+                      devices: "Klijentski uređaji (5)",
+                      status: "Normalno"
+                    },
+                    {
+                      layer: "Distribucijski sloj",
+                      devices: "Routeri i switchevi (2)",
+                      status: "Normalno"
+                    },
+                    {
+                      layer: "Jezgreni sloj",
+                      devices: "Serverski sustavi (2)",
+                      status: "Pod napadom"
+                    }
+                  ]}
+                  attackDetails={{
+                    target: "Server S1",
+                    type: "TCP SYN Flood",
+                    sources: "Više izvora",
+                    status: "Aktivni napad"
+                  }}
                 />
               )}
             </div>
           </div>
           
           {/* Traffic Path Analysis */}
-          {!isLoadingTrafficPaths && trafficPaths && (
-            <TrafficPath paths={trafficPaths} />
+          {!isLoadingTrafficPaths && (
+            <TrafficPath paths={[
+              {
+                id: 1,
+                pathId: "P-001",
+                source: "192.168.1.100",
+                destination: "10.0.0.5",
+                hops: "3",
+                trafficVolume: "Medium",
+                status: "normal"
+              },
+              {
+                id: 2,
+                pathId: "P-002",
+                source: "192.168.1.45",
+                destination: "10.0.0.10",
+                hops: "4",
+                trafficVolume: "High",
+                status: "anomalous"
+              }
+            ]} />
           )}
           
           {/* Graph Theory Analysis */}
-          {!isLoadingVulnerabilityAnalysis && vulnerabilityAnalysis && (
-            <VulnerabilityAnalysis data={vulnerabilityAnalysis} />
+          {!isLoadingVulnerabilityAnalysis && (
+            <VulnerabilityAnalysis data={{
+              centrality: [
+                { name: "Degree Centrality", value: 0.85 },
+                { name: "Betweenness Centrality", value: 0.67 },
+                { name: "Closeness Centrality", value: 0.76 }
+              ],
+              attackPath: {
+                probability: 0.78,
+                paths: ["client1 → router1 → server1", "client1 → router2 → server2"]
+              },
+              communities: [
+                { name: "Mrežna grupa 1", nodeCount: 3, risk: "high" },
+                { name: "Mrežna grupa 2", nodeCount: 2, risk: "medium" }
+              ]
+            }} />
           )}
         </TabsContent>
         
