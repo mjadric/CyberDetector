@@ -186,10 +186,40 @@ export async function resetDatabase(): Promise<boolean> {
     // Recreate tables
     await createTables();
     
+    // Seed with initial data
+    await seedInitialData();
+    
     return true;
   } catch (error) {
     log(`Error resetting database: ${error}`, 'postgres');
     return false;
+  }
+}
+
+/**
+ * Seed the database with initial data
+ */
+async function seedInitialData(): Promise<void> {
+  try {
+    log('Seeding database with initial data...', 'postgres');
+    
+    // Insert network metrics for dashboard directly with SQL
+    if (sql) {
+      await sql`
+        INSERT INTO network_metrics (name, value, change, icon, color)
+        VALUES 
+          ('Network Load', '72%', '+15%', 'device_hub', 'text-[#3B82F6]'),
+          ('Packet Rate', '5.2K/s', '+8%', 'speed', 'text-[#10B981]'),
+          ('Threat Level', 'High', '+23%', 'security', 'text-[#F59E0B]'),
+          ('Blocked Attacks', '142', '98%', 'gpp_good', 'text-[#5D3FD3]')
+      `;
+      
+      log('Database seeded with initial metrics', 'postgres');
+    } else {
+      log('SQL client not available for seeding data', 'postgres');
+    }
+  } catch (error) {
+    log(`Error seeding initial data: ${error}`, 'postgres');
   }
 }
 
@@ -347,12 +377,28 @@ async function createTables() {
  * Get all network metrics
  */
 export async function getNetworkMetrics(): Promise<NetworkMetrics[]> {
-  if (!db) {
+  if (!db || !sql) {
     throw new Error('Database not initialized');
   }
   
   try {
-    return await db.select().from(networkMetrics).orderBy(networkMetrics.id);
+    // Use raw SQL query to fetch metrics
+    const result = await sql`
+      SELECT * FROM network_metrics ORDER BY id
+    `;
+    
+    // Convert to expected format with explicit typing
+    return (result as any[]).map(row => ({
+      id: row.id,
+      name: row.name,
+      value: row.value,
+      change: row.change,
+      icon: row.icon,
+      color: row.color,
+      createTime: row.timestamp,
+      trend: row.trend,
+      change_percent: row.change_percent
+    }));
   } catch (error) {
     log(`Error getting network metrics: ${error}`, 'postgres');
     return [];
@@ -368,8 +414,31 @@ export async function insertNetworkMetric(metric: InsertNetworkMetrics): Promise
   }
   
   try {
-    const result = await db.insert(networkMetrics).values(metric).returning();
-    return result[0] || null;
+    // Use SQL query to manually insert since we had schema changes
+    const result = await sql`
+      INSERT INTO network_metrics 
+        (name, value, change, icon, color, trend, change_percent)
+      VALUES 
+        (${metric.name}, ${metric.value}, ${metric.change}, ${metric.icon}, ${metric.color}, ${metric.trend}, ${metric.change_percent})
+      RETURNING *
+    `;
+    
+    // Convert to expected format if successful
+    if (result && result.length > 0) {
+      return {
+        id: result[0].id,
+        name: result[0].name,
+        value: result[0].value,
+        change: result[0].change,
+        icon: result[0].icon,
+        color: result[0].color,
+        createTime: result[0].timestamp,
+        trend: result[0].trend,
+        change_percent: result[0].change_percent,
+      };
+    }
+    
+    return null;
   } catch (error) {
     log(`Error inserting network metric: ${error}`, 'postgres');
     return null;
