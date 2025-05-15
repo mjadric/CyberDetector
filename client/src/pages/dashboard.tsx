@@ -12,8 +12,8 @@ import { useState } from "react";
 
 export default function Dashboard() {
   
-  // Koristimo automatsko osvježavanje preko React Query 
-  // Nema potrebe za dodatnim setInterval-om
+  // Use automatic refresh via React Query
+  // No need for additional setInterval
   
   const { data: metrics, isLoading: isLoadingMetrics } = useQuery({
     queryKey: ['/api/metrics'],

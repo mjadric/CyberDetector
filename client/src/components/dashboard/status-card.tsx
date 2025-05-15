@@ -2,21 +2,31 @@ import { Card } from "@/components/ui/card";
 
 interface StatusCardProps {
   data: {
-    id: number;
+    id?: number;
     name: string;
     value: string;
     change: string;
     icon: string;
     color: string;
+    trend?: string;
   };
 }
 
 export default function StatusCard({ data }: StatusCardProps) {
-  const isPositiveChange = !data.change.startsWith('-');
+  // Determine if change is positive based on trend or text value
+  const isPositiveChange = data.trend 
+    ? data.trend === 'up'
+    : !data.change.startsWith('-');
+  
+  // By default: upward red (bad), downward green (good)
   const changeColor = isPositiveChange ? "text-[#EF4444]" : "text-[#10B981]";
   
-  // For the Blocked Attacks card, we want green to be positive
-  const adjustedChangeColor = data.name === "Blocked Attacks" 
+  // Special cases where upward is good and downward is bad
+  const invertedMetricNames = ["Blocked Attacks"];
+  const shouldInvertColors = invertedMetricNames.includes(data.name);
+  
+  // Apply the appropriate color based on context
+  const adjustedChangeColor = shouldInvertColors
     ? (isPositiveChange ? "text-[#10B981]" : "text-[#EF4444]")
     : changeColor;
   

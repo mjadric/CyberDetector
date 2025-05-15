@@ -45,9 +45,9 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
-      refetchInterval: 3000, // Osvježavanje svake 3 sekunde za stvarno-vremensko ažuriranje
+      refetchInterval: 3000, // Refresh every 3 seconds for real-time updates
       refetchOnWindowFocus: true,
-      staleTime: 1000, // Podaci postaju stari nakon 1 sekunde
+      staleTime: 1000, // Data becomes stale after 1 second
       retry: 1,
     },
     mutations: {
