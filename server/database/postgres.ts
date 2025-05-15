@@ -211,16 +211,101 @@ async function seedInitialData(): Promise<void> {
     
     // Insert network metrics for dashboard directly with SQL
     if (sql) {
+      // Add network metrics
       await sql`
-        INSERT INTO network_metrics (name, value, change, icon, color)
+        INSERT INTO network_metrics (name, value, change, icon, color, trend, change_percent)
         VALUES 
-          ('Network Load', '72%', '+15%', 'device_hub', 'text-[#3B82F6]'),
-          ('Packet Rate', '5.2K/s', '+8%', 'speed', 'text-[#10B981]'),
-          ('Threat Level', 'High', '+23%', 'security', 'text-[#F59E0B]'),
-          ('Blocked Attacks', '142', '98%', 'gpp_good', 'text-[#5D3FD3]')
+          ('Network Load', '72%', '+15%', 'device_hub', 'text-[#3B82F6]', 'up', 15.0),
+          ('Packet Rate', '5.2K/s', '+8%', 'speed', 'text-[#10B981]', 'up', 8.0),
+          ('Threat Level', 'High', '+23%', 'security', 'text-[#F59E0B]', 'up', 23.0),
+          ('Blocked Attacks', '142', '98%', 'gpp_good', 'text-[#5D3FD3]', 'down', -2.0)
       `;
       
-      log('Database seeded with initial metrics', 'postgres');
+      // Add dashboard metrics
+      await sql`
+        INSERT INTO dashboard_metrics (name, value, change_percent, trend)
+        VALUES 
+          ('Network Load', '72%', 15.0, 'up'),
+          ('Packet Rate', '5.2K/s', 8.0, 'up'),
+          ('Threat Level', 'High', 23.0, 'up'),
+          ('Blocked Attacks', '142', -2.0, 'down')
+      `;
+      
+      // Add network traffic data
+      const now = new Date();
+      for (let i = 0; i < 100; i++) {
+        const timestamp = new Date(now.getTime() - (i * 600000)); // 10-minute intervals
+        const isAnomaly = Math.random() > 0.8; // 20% chance of anomaly
+        
+        await sql`
+          INSERT INTO network_traffic (
+            source_ip, 
+            destination_ip, 
+            protocol, 
+            packet_size, 
+            timestamp, 
+            is_anomaly, 
+            anomaly_score
+          )
+          VALUES (
+            ${`192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`},
+            ${`10.0.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`},
+            ${['TCP', 'UDP', 'HTTP', 'HTTPS', 'DNS'][Math.floor(Math.random() * 5)]},
+            ${Math.floor(Math.random() * 1500) + 64},
+            ${timestamp},
+            ${isAnomaly},
+            ${isAnomaly ? Math.random() * 0.8 + 0.2 : Math.random() * 0.2}
+          )
+        `;
+      }
+      
+      // Add alerts
+      await sql`
+        INSERT INTO alerts (time, type, source_ip, destination_ip, severity, is_acknowledged)
+        VALUES 
+          ('15:15:21', 'Source IP Entropy Drop', '192.168.1.5', '10.0.0.1', 'medium', true),
+          ('15:05:21', 'TCP SYN Flood', '192.168.2.100', '10.0.0.5', 'high', false),
+          ('14:58:32', 'DNS Amplification', '192.168.3.45', '10.0.0.8', 'high', false),
+          ('14:42:17', 'HTTP Flood', '192.168.1.87', '10.0.0.15', 'medium', false),
+          ('14:30:05', 'Ping of Death', '192.168.4.22', '10.0.0.1', 'low', true)
+      `;
+      
+      // Add network nodes for topology visualization
+      await sql`
+        INSERT INTO network_nodes (node_id, name, type, ip_address, x, y, status)
+        VALUES 
+          ('router-1', 'Main Router', 'router', '192.168.0.1', 50, 50, 'active'),
+          ('switch-1', 'Core Switch', 'switch', '192.168.0.2', 150, 50, 'active'),
+          ('firewall-1', 'Firewall', 'firewall', '192.168.0.3', 100, 150, 'active'),
+          ('server-1', 'Web Server', 'server', '192.168.1.10', 200, 100, 'active'),
+          ('server-2', 'Database Server', 'server', '192.168.1.11', 250, 150, 'active'),
+          ('client-1', 'Client Workstation', 'client', '192.168.2.50', 150, 250, 'active'),
+          ('client-2', 'User Laptop', 'client', '192.168.2.51', 50, 200, 'anomalous')
+      `;
+      
+      // Add network links for topology visualization
+      await sql`
+        INSERT INTO network_links (source, target, status, bandwidth, latency)
+        VALUES 
+          ('router-1', 'switch-1', 'active', '1 Gbps', 2),
+          ('switch-1', 'firewall-1', 'active', '1 Gbps', 1),
+          ('firewall-1', 'server-1', 'active', '1 Gbps', 3),
+          ('firewall-1', 'server-2', 'active', '1 Gbps', 3),
+          ('switch-1', 'client-1', 'active', '100 Mbps', 5),
+          ('switch-1', 'client-2', 'anomalous', '100 Mbps', 15)
+      `;
+      
+      // Add traffic paths
+      await sql`
+        INSERT INTO traffic_paths (path_id, source, destination, hop_count, status)
+        VALUES 
+          ('path-1', 'Internet', 'server-1', 3, 'normal'),
+          ('path-2', 'client-1', 'server-2', 2, 'normal'),
+          ('path-3', 'Internet', 'server-2', 3, 'anomalous'),
+          ('path-4', 'client-2', 'Internet', 2, 'normal')
+      `;
+      
+      log('Database seeded with initial metrics, traffic data, alerts, and network topology', 'postgres');
     } else {
       log('SQL client not available for seeding data', 'postgres');
     }
