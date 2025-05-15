@@ -191,7 +191,7 @@ def get_status():
         }
     })
 
-@app.route('/analysis', methods=['GET'])
+@app.route('/api/python/analysis', methods=['GET'])
 def get_analysis():
     """Return comprehensive analysis data"""
     try:
@@ -200,7 +200,7 @@ def get_analysis():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/topology', methods=['GET'])
+@app.route('/api/python/topology', methods=['GET'])
 def get_topology():
     """Return network topology data"""
     try:
@@ -209,7 +209,7 @@ def get_topology():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/python/vulnerability', methods=['GET'])
+@app.route('/vulnerability', methods=['GET'])
 def get_vulnerability():
     """Return vulnerability analysis data"""
     try:
@@ -218,7 +218,7 @@ def get_vulnerability():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/python/traffic-paths', methods=['GET'])
+@app.route('/traffic-paths', methods=['GET'])
 def get_traffic_paths():
     """Return traffic paths data"""
     try:
@@ -631,7 +631,7 @@ class NetworkTrafficSimulator:
 # Initialize the simulator
 traffic_simulator = NetworkTrafficSimulator()
 
-@app.route('/simulate', methods=['POST'])
+@app.route('/api/python/simulate', methods=['POST'])
 def simulate_attack():
     """Simulate a DDoS attack for testing"""
     try:
