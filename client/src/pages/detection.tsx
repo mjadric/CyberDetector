@@ -3,7 +3,12 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Radar, FileJson, Zap, Play } from "lucide-react";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Radar, FileJson, Zap, Play, Cog, Brain, RefreshCw } from "lucide-react";
 import FeatureWeights from "@/components/detection/feature-weights";
 import DecisionTree from "@/components/detection/decision-tree";
 import RealTimeDetection from "@/components/detection/real-time-detection";
@@ -91,6 +96,82 @@ export default function Detection() {
   
   // Detection state from the most recent scan
   const [detectionResult, setDetectionResult] = useState<any>(null);
+  
+  // State for hybrid DDQN model training
+  const [trainingConfig, setTrainingConfig] = useState({
+    episodes: 10,
+    batchSize: 32,
+    syntheticRatio: 0.5,
+  });
+  
+  // State for tracking training status
+  const [trainingStatus, setTrainingStatus] = useState({
+    isTraining: false,
+    progress: 0,
+    message: '',
+  });
+  
+  // Mutation for training the DDQN model
+  const trainModelMutation = useMutation({
+    mutationFn: async () => {
+      setTrainingStatus({
+        isTraining: true,
+        progress: 10,
+        message: 'Inicijalizacija DDQN modela...',
+      });
+      
+      // Call the Python API endpoint for training
+      const response = await fetch('/api/python/train', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          episodes: trainingConfig.episodes,
+          batch_size: trainingConfig.batchSize,
+          synthetic_ratio: trainingConfig.syntheticRatio,
+        }),
+      });
+      
+      setTrainingStatus(prev => ({
+        ...prev,
+        progress: 50,
+        message: 'Hibridno treniranje u tijeku...',
+      }));
+      
+      if (!response.ok) {
+        throw new Error('Neuspješno treniranje modela');
+      }
+      
+      const result = await response.json();
+      
+      setTrainingStatus(prev => ({
+        ...prev,
+        progress: 100,
+        message: 'Treniranje završeno!',
+      }));
+      
+      return result;
+    },
+    onSuccess: (data) => {
+      console.log("Training success:", data);
+      setTimeout(() => {
+        setTrainingStatus({
+          isTraining: false,
+          progress: 0,
+          message: 'Model uspješno treniran',
+        });
+      }, 2000);
+    },
+    onError: (error) => {
+      console.error("Training error:", error);
+      setTrainingStatus({
+        isTraining: false,
+        progress: 0,
+        message: `Greška: ${error}`,
+      });
+    }
+  });
   
   // Mutation for running a detection scan
   const runDetectionMutation = useMutation({
@@ -190,7 +271,7 @@ export default function Detection() {
       </div>
       
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="realtime" className="flex items-center">
             <Zap className="h-4 w-4 mr-2" />
             Real-time Detection
@@ -198,6 +279,10 @@ export default function Detection() {
           <TabsTrigger value="model" className="flex items-center">
             <FileJson className="h-4 w-4 mr-2" />
             Model Visualization
+          </TabsTrigger>
+          <TabsTrigger value="train" className="flex items-center">
+            <Brain className="h-4 w-4 mr-2" />
+            Hibridni DDQN
           </TabsTrigger>
           <TabsTrigger value="alerts" className="flex items-center">
             <Radar className="h-4 w-4 mr-2" />
@@ -219,6 +304,135 @@ export default function Detection() {
               thresholds={decisionThresholds} 
               currentScore={detectionResult?.threat_score} 
             />
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="train" className="mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl flex items-center">
+                  <Brain className="h-5 w-5 mr-2" />
+                  Hibridno treniranje DDQN modela
+                </CardTitle>
+                <CardDescription>
+                  Trenirajte DDQN model s kombinacijom stvarnih i sintetičkih podataka
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="episodes">Broj epizoda:</Label>
+                    <div className="flex items-center gap-4">
+                      <Slider 
+                        id="episodes"
+                        min={1} 
+                        max={50} 
+                        step={1}
+                        value={[trainingConfig.episodes]}
+                        onValueChange={(value) => setTrainingConfig(prev => ({ ...prev, episodes: value[0] }))}
+                        disabled={trainingStatus.isTraining}
+                      />
+                      <span className="text-right font-medium">{trainingConfig.episodes}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="batchSize">Veličina batcha:</Label>
+                    <div className="flex items-center gap-4">
+                      <Slider 
+                        id="batchSize"
+                        min={8} 
+                        max={128} 
+                        step={8}
+                        value={[trainingConfig.batchSize]}
+                        onValueChange={(value) => setTrainingConfig(prev => ({ ...prev, batchSize: value[0] }))}
+                        disabled={trainingStatus.isTraining}
+                      />
+                      <span className="text-right font-medium">{trainingConfig.batchSize}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="syntheticRatio">Udio sintetičkih podataka:</Label>
+                    <div className="flex items-center gap-4">
+                      <Slider 
+                        id="syntheticRatio"
+                        min={0} 
+                        max={1} 
+                        step={0.1}
+                        value={[trainingConfig.syntheticRatio]}
+                        onValueChange={(value) => setTrainingConfig(prev => ({ ...prev, syntheticRatio: value[0] }))}
+                        disabled={trainingStatus.isTraining}
+                      />
+                      <span className="text-right font-medium">{Math.round(trainingConfig.syntheticRatio * 100)}%</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button 
+                  className="w-full"
+                  onClick={() => trainModelMutation.mutate()} 
+                  disabled={trainingStatus.isTraining}
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${trainingStatus.isTraining ? 'animate-spin' : ''}`} />
+                  {trainingStatus.isTraining ? 'Treniranje u tijeku...' : 'Treniraj model'}
+                </Button>
+              </CardFooter>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl flex items-center">
+                  <Cog className="h-5 w-5 mr-2" />
+                  Status treniranja
+                </CardTitle>
+                <CardDescription>
+                  Prati napredak i performanse treniranja
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {trainingStatus.isTraining ? (
+                  <div className="space-y-4">
+                    <Progress value={trainingStatus.progress} />
+                    <p className="text-center text-muted-foreground">{trainingStatus.message}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4 pt-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-primary/10 p-4 rounded-lg">
+                        <div className="text-xl font-semibold">{trainingConfig.episodes}</div>
+                        <div className="text-xs text-muted-foreground">Broj epizoda</div>
+                      </div>
+                      <div className="bg-primary/10 p-4 rounded-lg">
+                        <div className="text-xl font-semibold">{trainingConfig.batchSize}</div>
+                        <div className="text-xs text-muted-foreground">Veličina batcha</div>
+                      </div>
+                      <div className="bg-primary/10 p-4 rounded-lg">
+                        <div className="text-xl font-semibold">{Math.round(trainingConfig.syntheticRatio * 100)}%</div>
+                        <div className="text-xs text-muted-foreground">Sintetički podaci</div>
+                      </div>
+                      <div className="bg-primary/10 p-4 rounded-lg">
+                        <div className="text-xl font-semibold">MongoDB</div>
+                        <div className="text-xs text-muted-foreground">Izvor podataka</div>
+                      </div>
+                    </div>
+                    
+                    <div className="pt-4">
+                      <h4 className="text-sm font-medium mb-2">Prednosti hibridnog pristupa:</h4>
+                      <ul className="text-sm text-muted-foreground space-y-1">
+                        <li>• Koristi MongoDB podatke za DDoS detekciju</li>
+                        <li>• Generira sintetičke podatke kad nema dovoljno stvarnih podataka</li>
+                        <li>• Podržava treniranje na specifičnim vrstama napada</li>
+                        <li>• Primjenjuje napredne nagrade za poboljšano učenje</li>
+                        <li>• Automatski sprema težine modela za buduću upotrebu</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
         
