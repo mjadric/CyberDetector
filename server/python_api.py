@@ -178,7 +178,7 @@ def generate_mock_analysis_data():
     }
 
 # API routes
-@app.route('/api/python/status', methods=['GET'])
+@app.route('/status', methods=['GET'])
 def get_status():
     """Return the status of the Python API server"""
     return jsonify({
@@ -227,7 +227,7 @@ def get_traffic_paths():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/python/mitigate', methods=['POST'])
+@app.route('/mitigate', methods=['POST'])
 def mitigate_attack():
     """Take mitigation action against an attack"""
     try:
