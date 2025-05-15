@@ -227,6 +227,35 @@ def get_traffic_paths():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/train', methods=['POST'])
+def train_model():
+    """Train the DDQN model with a hybrid approach"""
+    try:
+        data = request.json or {}
+        episodes = data.get('episodes', 10)
+        batch_size = data.get('batch_size', 32)
+        synthetic_ratio = data.get('synthetic_ratio', 0.5)
+        
+        # Import the training function from ddqn_api
+        try:
+            from analysis.ddqn_api import train_ddqn_model
+            result = train_ddqn_model(
+                episodes=episodes,
+                batch_size=batch_size,
+                save_model=True,
+                synthetic_ratio=synthetic_ratio
+            )
+            return jsonify(result)
+        except ImportError as e:
+            # If the import fails, use the basic approach
+            print(f"Error importing DDQN API: {e}")
+            return jsonify({
+                "success": False,
+                "message": "DDQN module not available, consider using the algorithmic approach instead"
+            })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/mitigate', methods=['POST'])
 def mitigate_attack():
     """Take mitigation action against an attack"""
