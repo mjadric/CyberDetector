@@ -10,6 +10,7 @@ import Analysis from "@/pages/analysis";
 import Simulation from "@/pages/simulation";
 import Detection from "@/pages/detection";
 import Settings from "@/pages/settings";
+import DatabaseExplorer from "@/pages/database-explorer";
 
 function Router() {
   return (
@@ -19,6 +20,7 @@ function Router() {
         <Route path="/analysis" component={Analysis} />
         <Route path="/simulation" component={Simulation} />
         <Route path="/detection" component={Detection} />
+        <Route path="/database" component={DatabaseExplorer} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>

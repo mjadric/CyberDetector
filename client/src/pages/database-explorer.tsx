@@ -73,7 +73,7 @@ export default function DatabaseExplorer() {
     
     return (
       <pre className="bg-slate-950 text-slate-100 p-4 rounded-md overflow-auto text-sm">
-        {JSON.stringify(obj, null, 2)}
+        {JSON.stringify(obj, null, 2) as string}
       </pre>
     );
   };
@@ -146,10 +146,10 @@ export default function DatabaseExplorer() {
               <Skeleton className="w-full h-20" />
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {Object.entries(dbStatus?.mongoStats || {}).map(([collection, count]) => (
+                {Object.entries(dbStatus?.mongoStats || {}).map(([collection, count]: [string, any]) => (
                   <div key={collection} className="bg-slate-100 p-4 rounded-lg text-center">
                     <p className="text-sm text-muted-foreground">{collection}</p>
-                    <p className="text-2xl font-bold">{count}</p>
+                    <p className="text-2xl font-bold">{String(count)}</p>
                   </div>
                 ))}
                 {Object.keys(dbStatus?.mongoStats || {}).length === 0 && (

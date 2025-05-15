@@ -44,6 +44,15 @@ export default function Sidebar() {
         </div>
       </Link>
       
+      <Link href="/database">
+        <div className={cn(
+          "p-3 rounded-md mb-2 cursor-pointer",
+          isActive("/database") ? "text-white bg-primary" : "text-muted-foreground hover:text-foreground"
+        )}>
+          <span className="material-icons">storage</span>
+        </div>
+      </Link>
+      
       <Link href="/settings">
         <div className={cn(
           "p-3 rounded-md mb-2 cursor-pointer",
