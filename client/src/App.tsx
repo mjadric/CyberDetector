@@ -8,6 +8,7 @@ import AppLayout from "@/components/layout/app-layout";
 import Dashboard from "@/pages/dashboard";
 import Analysis from "@/pages/analysis";
 import Simulation from "@/pages/simulation";
+import Detection from "@/pages/detection";
 import Settings from "@/pages/settings";
 
 function Router() {
@@ -17,6 +18,7 @@ function Router() {
         <Route path="/" component={Dashboard} />
         <Route path="/analysis" component={Analysis} />
         <Route path="/simulation" component={Simulation} />
+        <Route path="/detection" component={Detection} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>

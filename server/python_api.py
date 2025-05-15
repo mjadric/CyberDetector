@@ -31,6 +31,15 @@ DDQN_AVAILABLE = False
 # We'll skip TensorFlow imports for now due to compatibility issues
 # This will make the API use simpler algorithms instead
 
+# Try to import MongoDB
+try:
+    from pymongo import MongoClient
+    MONGO_AVAILABLE = True
+    print("MongoDB support is available")
+except ImportError:
+    MONGO_AVAILABLE = False
+    print("Warning: MongoDB support not available")
+
 print("Using basic algorithms for DDoS detection instead of TensorFlow-based DDQN")
 
 # Initialize Flask app
@@ -261,26 +270,30 @@ def mitigate_attack():
         
         # Create alert in MongoDB if we're detecting an attack
         if action > 0:
-            try:
-                # Using the MongoDB client directly
-                client = MongoClient(os.environ.get('MONGODB_URI', 'mongodb://localhost:27017'))
-                db = client.get_database('ddos_defender')
-                alerts_collection = db.get_collection('alerts')
-                
-                # Save alert data
-                alert_data = {
-                    "timestamp": datetime.now(),
-                    "type": "Algorithmic Detection",
-                    "severity": "High" if action > 1 else "Medium",
-                    "message": f"Detected potential attack, action: {mitigation['name']}",
-                    "source_ips": data.get("source_ips", []),
-                    "confidence": confidence,
-                    "threat_score": threat_score
-                }
-                alerts_collection.insert_one(alert_data)
-                client.close()
-            except Exception as mongo_error:
-                print(f"Error saving alert to MongoDB: {mongo_error}")
+            # Only try to use MongoDB if it's available
+            if MONGO_AVAILABLE:
+                try:
+                    # Using the MongoDB client directly
+                    client = MongoClient(os.environ.get('MONGODB_URI', 'mongodb://localhost:27017'))
+                    db = client.get_database('ddos_defender')
+                    alerts_collection = db.get_collection('alerts')
+                    
+                    # Save alert data
+                    alert_data = {
+                        "timestamp": datetime.now(),
+                        "type": "Algorithmic Detection",
+                        "severity": "High" if action > 1 else "Medium",
+                        "message": f"Detected potential attack, action: {mitigation['name']}",
+                        "source_ips": data.get("source_ips", []),
+                        "confidence": confidence,
+                        "threat_score": threat_score
+                    }
+                    alerts_collection.insert_one(alert_data)
+                    client.close()
+                except Exception as mongo_error:
+                    print(f"Error saving alert to MongoDB: {mongo_error}")
+            else:
+                print("MongoDB not available, skipping alert creation")
         
         # Return mitigation result
         return jsonify({
