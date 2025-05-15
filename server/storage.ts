@@ -30,10 +30,13 @@ import {
 import { 
   connectToPostgres,
   getNetworkMetrics as pgGetNetworkMetrics,
+  insertNetworkMetric as pgInsertNetworkMetric,
   getAlerts as pgGetAlerts,
   getNetworkTopology as pgGetNetworkTopology,
   getTrafficPaths as pgGetTrafficPaths,
-  getNetworkTrafficData as pgGetNetworkTrafficData
+  getNetworkTrafficData as pgGetNetworkTrafficData,
+  insertNetworkNode as pgInsertNetworkNode,
+  insertNetworkLink as pgInsertNetworkLink
 } from "./database/postgres";
 
 // Import Neo4j functionality

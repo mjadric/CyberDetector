@@ -187,7 +187,13 @@ export async function resetDatabase(): Promise<boolean> {
     await createTables();
     
     // Seed with initial data
-    await seedInitialData();
+    try {
+      await seedInitialData();
+      log('Database seeded successfully', 'postgres');
+    } catch (seedError) {
+      log(`Error seeding data: ${seedError}`, 'postgres');
+      // Continue even if seeding fails
+    }
     
     return true;
   } catch (error) {
