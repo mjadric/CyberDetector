@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import AlertPanel from "@/components/dashboard/alert-panel";
 import StatusCard from "@/components/dashboard/status-card";
 import TrafficChart from "@/components/dashboard/traffic-chart";
@@ -7,7 +8,7 @@ import AlertHistory from "@/components/dashboard/alert-history";
 import IpAnalysis from "@/components/dashboard/ip-analysis";
 import { Button } from "@/components/ui/button";
 import { Calendar, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function Dashboard() {
   const [timeRange, setTimeRange] = useState("Last 24 hours");
