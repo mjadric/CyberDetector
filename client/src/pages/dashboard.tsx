@@ -52,55 +52,11 @@ export default function Dashboard() {
           <h2 className="text-2xl font-semibold">Dashboard</h2>
           <p className="text-muted-foreground">Overview of network status and threats</p>
         </div>
-        <div className="flex items-center space-x-2">
-          <div className="flex items-center text-sm text-muted-foreground mr-2">
+        <div className="flex items-center">
+          <div className="flex items-center text-sm text-muted-foreground">
             <div className="h-2 w-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
             Realtime monitoring
           </div>
-          <div className="flex space-x-1">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => { 
-                queryClient.setQueryData(['/api/time-range'], "1h");
-                handleRefresh();
-              }}
-              className="flex items-center"
-            >
-              1h
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => {
-                queryClient.setQueryData(['/api/time-range'], "4h");
-                handleRefresh();
-              }}
-              className="flex items-center"
-            >
-              4h
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => {
-                queryClient.setQueryData(['/api/time-range'], "24h");
-                handleRefresh();
-              }}
-              className="flex items-center"
-            >
-              24h
-            </Button>
-          </div>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={handleRefresh}
-            className="flex items-center"
-          >
-            <RefreshCw className="h-4 w-4 mr-1" />
-            Refresh
-          </Button>
         </div>
       </div>
       
