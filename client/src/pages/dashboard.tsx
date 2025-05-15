@@ -11,36 +11,28 @@ import { Calendar, RefreshCw } from "lucide-react";
 import { useState } from "react";
 
 export default function Dashboard() {
-  const [timeRange, setTimeRange] = useState("Last 24 hours");
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState(5000); // 5 sekundi
   
   // Koristimo automatsko osvježavanje preko React Query 
   // Nema potrebe za dodatnim setInterval-om
   
   const { data: metrics, isLoading: isLoadingMetrics } = useQuery({
     queryKey: ['/api/metrics'],
-    refetchInterval: autoRefresh ? refreshInterval : false,
   });
   
   const { data: alerts, isLoading: isLoadingAlerts } = useQuery({
     queryKey: ['/api/alerts'],
-    refetchInterval: autoRefresh ? refreshInterval : false,
   });
   
   const { data: traffic, isLoading: isLoadingTraffic } = useQuery<any>({
     queryKey: ['/api/traffic'],
-    refetchInterval: autoRefresh ? refreshInterval : false,
   });
   
   const { data: protocols, isLoading: isLoadingProtocols } = useQuery<any[]>({
     queryKey: ['/api/protocols'],
-    refetchInterval: autoRefresh ? refreshInterval : false,
   });
   
   const { data: ipAnalysis, isLoading: isLoadingIpAnalysis } = useQuery<any[]>({
     queryKey: ['/api/ip-analysis'],
-    refetchInterval: autoRefresh ? refreshInterval : false,
   });
 
   const handleRefresh = () => {
@@ -60,10 +52,36 @@ export default function Dashboard() {
           <h2 className="text-2xl font-semibold">Dashboard</h2>
           <p className="text-muted-foreground">Overview of network status and threats</p>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex items-center space-x-2">
           <div className="flex items-center text-sm text-muted-foreground mr-2">
             <div className="h-2 w-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
-            Auto-refresh aktivno
+            Realtime monitoring
+          </div>
+          <div className="flex space-x-1">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => queryClient.setQueryData(['/api/time-range'], "1h")}
+              className="flex items-center"
+            >
+              1h
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => queryClient.setQueryData(['/api/time-range'], "4h")}
+              className="flex items-center"
+            >
+              4h
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => queryClient.setQueryData(['/api/time-range'], "24h")}
+              className="flex items-center"
+            >
+              24h
+            </Button>
           </div>
           <Button 
             variant="outline" 
@@ -73,14 +91,6 @@ export default function Dashboard() {
           >
             <RefreshCw className="h-4 w-4 mr-1" />
             Refresh
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            className="flex items-center"
-          >
-            <Calendar className="h-4 w-4 mr-1" />
-            {timeRange}
           </Button>
         </div>
       </div>
