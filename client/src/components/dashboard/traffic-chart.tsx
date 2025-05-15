@@ -3,9 +3,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Chart from "chart.js/auto";
 import { chartColors } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 
 interface TrafficChartProps {
-  data: {
+  data?: {
     labels: string[];
     normalData: number[];
     attackData: number[];
@@ -16,6 +17,12 @@ export default function TrafficChart({ data }: TrafficChartProps) {
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstance = useRef<Chart | null>(null);
   const [selectedProtocol, setSelectedProtocol] = useState("all");
+  
+  // Fetch data from API with auto-refresh
+  const { data: trafficData } = useQuery({
+    queryKey: ['/api/traffic'],
+    refetchInterval: 3000 // Refresh every 3 seconds
+  });
   
   useEffect(() => {
     if (chartRef.current) {
@@ -30,11 +37,11 @@ export default function TrafficChart({ data }: TrafficChartProps) {
         chartInstance.current = new Chart(ctx, {
           type: "line",
           data: {
-            labels: data.labels,
+            labels: chartData.labels,
             datasets: [
               {
                 label: "Normal Traffic",
-                data: data.normalData,
+                data: chartData.normalData,
                 borderColor: chartColors.normalTraffic,
                 backgroundColor: `${chartColors.normalTraffic.replace('1)', '0.1)')}`,
                 fill: true,
@@ -42,7 +49,7 @@ export default function TrafficChart({ data }: TrafficChartProps) {
               },
               {
                 label: "Attack Traffic",
-                data: data.attackData,
+                data: chartData.attackData,
                 borderColor: chartColors.attackTraffic,
                 backgroundColor: `${chartColors.attackTraffic.replace('1)', '0.1)')}`,
                 fill: true,
@@ -139,11 +146,11 @@ export default function TrafficChart({ data }: TrafficChartProps) {
         <div className="bg-blue-950/30 border border-blue-800/30 p-3 rounded-lg mb-2">
           <div className="flex items-center">
             <div className="h-3 w-3 rounded-full bg-blue-500 mr-2"></div>
-            <span className="text-sm">Normalni promet: Uobičajene mrežne aktivnosti korisnika</span>
+            <span className="text-sm">Normal Traffic: Regular network activities</span>
           </div>
           <div className="flex items-center mt-1">
             <div className="h-3 w-3 rounded-full bg-red-500 mr-2"></div>
-            <span className="text-sm">Napadački promet: Potencijalne DDoS i druge anomalije</span>
+            <span className="text-sm">Attack Traffic: Potential DDoS and other anomalies</span>
           </div>
         </div>
       </div>
