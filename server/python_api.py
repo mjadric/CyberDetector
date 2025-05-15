@@ -81,57 +81,229 @@ def create_mitigation_action(action_index, intensity=None):
 
 # Mock data generators for development purposes
 def generate_mock_network_topology():
-    """Generate a mock network topology for development and testing"""
+    """Generate a hierarchical network topology based on the research methodology"""
+    
+    # Create hierarchical network topology following the documented structure:
+    # - Core Layer: 1-5 central routers
+    # - Distribution Layer: 3-10 switches
+    # - Access Layer: 3-10 servers and 9-20 hosts
+    
+    # Setup core layer (routers)
+    routers = [
+        {"id": f"router{i+1}", "name": f"R{i+1}", "type": "router", 
+         "layer": "core", "status": "active", "load": 45 + (i*10), 
+         "x": 100 + (i*150), "y": 50} 
+        for i in range(2)  # Using 2 core routers
+    ]
+    
+    # Setup distribution layer (switches)
+    switches = [
+        {"id": f"switch{i+1}", "name": f"SW{i+1}", "type": "switch", 
+         "layer": "distribution", "status": "active", "load": 30 + (i*5),
+         "x": 50 + (i*100), "y": 150} 
+        for i in range(4)  # Using 4 switches
+    ]
+    
+    # Setup access layer (servers)
+    server_names = ["Web", "DB", "Auth"]
+    servers = [
+        {"id": f"server{i+1}", "name": f"{server_names[i]}", "type": "server", 
+         "layer": "access", "status": "active", "load": 60 + (i*7),
+         "vulnerabilities": ["CVE-2023-1234"] if i == 1 else [],
+         "x": 50 + (i*100), "y": 250} 
+        for i in range(3)
+    ]
+    
+    # Setup hosts (client machines)
+    hosts = [
+        {"id": f"host{i+1}", "name": f"C{i+1}", "type": "host", 
+         "layer": "access", "status": "active" if i != 2 else "compromised",
+         "x": 100 + (i*100), "y": 350} 
+        for i in range(3)  # Using 3 hosts for simplicity in visualization
+    ]
+    
+    # Define the network links following hierarchy: router -> switch -> server/host
+    links = [
+        # Router to router connections
+        {"source": "router1", "target": "router2", "weight": 10, "status": "normal", "traffic": 45},
+        
+        # Router to switch connections
+        {"source": "router1", "target": "switch1", "weight": 8, "status": "normal", "traffic": 38},
+        {"source": "router1", "target": "switch2", "weight": 8, "status": "normal", "traffic": 42},
+        {"source": "router2", "target": "switch3", "weight": 8, "status": "normal", "traffic": 35},
+        {"source": "router2", "target": "switch4", "weight": 8, "status": "congested", "traffic": 82},
+        
+        # Switch to server connections
+        {"source": "switch1", "target": "server1", "weight": 5, "status": "normal", "traffic": 30},
+        {"source": "switch2", "target": "server2", "weight": 5, "status": "normal", "traffic": 55},
+        {"source": "switch3", "target": "server3", "weight": 5, "status": "normal", "traffic": 25},
+        
+        # Switch to host connections
+        {"source": "switch1", "target": "host1", "weight": 3, "status": "normal", "traffic": 15},
+        {"source": "switch2", "target": "host2", "weight": 3, "status": "normal", "traffic": 18},
+        {"source": "switch3", "target": "host3", "weight": 3, "status": "attacked", "traffic": 78}
+    ]
+    
+    # Add additional cross-connections for redundancy and realistic topology
+    additional_links = [
+        {"source": "switch1", "target": "switch2", "weight": 5, "status": "normal", "traffic": 12},
+        {"source": "switch3", "target": "switch4", "weight": 5, "status": "normal", "traffic": 14},
+        {"source": "switch2", "target": "server3", "weight": 5, "status": "normal", "traffic": 8}
+    ]
+    links.extend(additional_links)
+    
+    # Combine all nodes
+    nodes = routers + switches + servers + hosts
+    
     return {
-        "nodes": [
-            {"id": "router1", "name": "R1", "type": "router", "x": 50, "y": 50},
-            {"id": "router2", "name": "R2", "type": "router", "x": 200, "y": 50},
-            {"id": "server1", "name": "S1", "type": "server", "x": 50, "y": 150},
-            {"id": "server2", "name": "S2", "type": "server", "x": 200, "y": 150},
-            {"id": "client1", "name": "C1", "type": "client", "x": 125, "y": 250}
-        ],
-        "links": [
-            {"source": "router1", "target": "router2"},
-            {"source": "router1", "target": "server1"},
-            {"source": "router2", "target": "server2"},
-            {"source": "router1", "target": "client1"},
-            {"source": "router2", "target": "client1"}
-        ]
+        "nodes": nodes,
+        "links": links
     }
 
 def generate_mock_vulnerability_analysis():
-    """Generate mock vulnerability analysis data"""
+    """Generate mock vulnerability analysis data based on the methodology documentation"""
     return {
+        # Graph theory centrality metrics
         "centrality": [
-            {"name": "Degree Centrality", "value": 0.85},
-            {"name": "Betweenness Centrality", "value": 0.67},
-            {"name": "Closeness Centrality", "value": 0.76}
+            {"name": "Degree Centrality", "value": 0.85, "description": "Measures the number of direct connections a node has"},
+            {"name": "Betweenness Centrality", "value": 0.67, "description": "Measures how often a node lies on shortest paths between other nodes"},
+            {"name": "Closeness Centrality", "value": 0.76, "description": "Measures how close a node is to all other nodes"}
         ],
-        "critical_nodes": ["router1", "server1"],
+        
+        # Critical nodes based on centrality and vulnerability
+        "critical_nodes": [
+            {"id": "router1", "risk_score": 0.85, "vulnerabilities": [], "reason": "High centrality as core router"},
+            {"id": "server2", "risk_score": 0.78, "vulnerabilities": ["CVE-2023-1234"], "reason": "Database server with known vulnerability"},
+            {"id": "host3", "risk_score": 0.65, "vulnerabilities": [], "reason": "Compromised client machine"}
+        ],
+        
+        # Attack paths analysis
         "attack_paths": [
-            {"path": ["client1", "router1", "server1"], "risk": "high"},
-            {"path": ["client1", "router2", "server2"], "risk": "medium"}
+            {
+                "path": ["host3", "switch3", "router2", "router1", "switch1", "server1"], 
+                "risk": "high",
+                "explanation": "Critical path from compromised host to web server",
+                "impact_score": 0.85
+            },
+            {
+                "path": ["host3", "switch3", "server3"], 
+                "risk": "medium",
+                "explanation": "Path from compromised host to authentication server",
+                "impact_score": 0.72
+            },
+            {
+                "path": ["host3", "switch3", "switch2", "server2"], 
+                "risk": "critical",
+                "explanation": "Path from compromised host to vulnerable database",
+                "impact_score": 0.92
+            }
+        ],
+        
+        # Community detection results
+        "communities": [
+            {"id": 1, "nodes": ["router1", "router2"], "description": "Core network layer"},
+            {"id": 2, "nodes": ["switch1", "switch2", "server1", "server2", "host1", "host2"], "description": "Primary service cluster"},
+            {"id": 3, "nodes": ["switch3", "switch4", "server3", "host3"], "description": "Secondary service cluster with compromised node"}
+        ],
+        
+        # Overall vulnerability metrics
+        "network_vulnerability_score": 0.68,
+        "remediation_recommendations": [
+            {"target": "server2", "action": "Patch CVE-2023-1234", "priority": "high"},
+            {"target": "host3", "action": "Isolate and scan compromised machine", "priority": "critical"},
+            {"target": "router1-router2", "action": "Implement redundant connection", "priority": "medium"}
         ]
     }
 
 def generate_mock_traffic_paths():
-    """Generate mock traffic paths data"""
+    """Generate mock traffic paths data based on the network topology and methodology"""
     return [
         {
             "id": 1,
             "pathId": "P-001",
-            "source": "192.168.1.100",
-            "destination": "10.0.0.5",
+            "source": "host1",
+            "source_ip": "192.168.1.101",
+            "destination": "server1",
+            "destination_ip": "10.0.0.5",
+            "protocol": "HTTP",
+            "port": 80,
             "hopCount": 3,
-            "status": "normal"
+            "path": ["host1", "switch1", "router1", "server1"],
+            "status": "normal",
+            "traffic_volume": 2450,
+            "packets_per_second": 32,
+            "latency": 15,
+            "bandwidth_usage": 0.35
         },
         {
             "id": 2,
             "pathId": "P-002",
-            "source": "192.168.1.45",
-            "destination": "10.0.0.10",
+            "source": "host2",
+            "source_ip": "192.168.1.102",
+            "destination": "server2",
+            "destination_ip": "10.0.0.6",
+            "protocol": "HTTPS",
+            "port": 443,
             "hopCount": 4,
-            "status": "attack"
+            "path": ["host2", "switch2", "router1", "router2", "server2"],
+            "status": "normal",
+            "traffic_volume": 5620,
+            "packets_per_second": 47,
+            "latency": 22,
+            "bandwidth_usage": 0.58
+        },
+        {
+            "id": 3,
+            "pathId": "P-003",
+            "source": "host3",
+            "source_ip": "192.168.1.103",
+            "destination": "server2",
+            "destination_ip": "10.0.0.6",
+            "protocol": "HTTPS",
+            "port": 443,
+            "hopCount": 4,
+            "path": ["host3", "switch3", "router2", "server2"],
+            "status": "suspicious",
+            "traffic_volume": 8950,
+            "packets_per_second": 124,
+            "latency": 45,
+            "bandwidth_usage": 0.74,
+            "security_flags": ["abnormal_volume", "unusual_pattern"]
+        },
+        {
+            "id": 4,
+            "pathId": "P-004",
+            "source": "host3",
+            "source_ip": "192.168.1.103",
+            "destination": "server1",
+            "destination_ip": "10.0.0.5",
+            "protocol": "HTTP",
+            "port": 80,
+            "hopCount": 5,
+            "path": ["host3", "switch3", "router2", "router1", "switch1", "server1"],
+            "status": "attack",
+            "traffic_volume": 12500,
+            "packets_per_second": 350,
+            "latency": 78,
+            "bandwidth_usage": 0.92,
+            "security_flags": ["attack_signature_match", "syn_flood_pattern", "rate_limited"]
+        },
+        {
+            "id": 5,
+            "pathId": "P-005",
+            "source": "host1",
+            "source_ip": "192.168.1.101",
+            "destination": "server3",
+            "destination_ip": "10.0.0.7",
+            "protocol": "LDAP",
+            "port": 389,
+            "hopCount": 4,
+            "path": ["host1", "switch1", "switch2", "server3"],
+            "status": "normal",
+            "traffic_volume": 980,
+            "packets_per_second": 12,
+            "latency": 18,
+            "bandwidth_usage": 0.22
         }
     ]
 
