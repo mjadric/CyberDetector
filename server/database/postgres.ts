@@ -12,9 +12,7 @@ import {
   networkLinks, type NetworkLink, type InsertNetworkLink
 } from '../../shared/schema';
 
-// Configure Neon client
-neonConfig.fetchConnectionCache = true;
-neonConfig.wsDefaultMaxLifetime = 60; // Configure WebSocket lifetime for better performance
+// Configure Neon client - WebSockets are handled automatically in newer versions
 
 // Database connection
 let sql: ReturnType<typeof neon> | null = null;
@@ -34,15 +32,37 @@ function detectDatabaseType(url: string = '') {
  * Connect to PostgreSQL database
  */
 export async function connectToPostgres(): Promise<boolean> {
-  if (!process.env.DATABASE_URL) {
-    log('DATABASE_URL is not defined in environment variables', 'postgres');
+  // Check for database connection info
+  // Either DATABASE_URL should be defined, or individual PG* variables
+  if (!process.env.DATABASE_URL && 
+      !(process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD && process.env.PGDATABASE)) {
+    log('Neither DATABASE_URL nor PG* variables are defined', 'postgres');
     return false;
   }
 
   try {
     log('Connecting to PostgreSQL...', 'postgres');
     
-    let connectionUrl = process.env.DATABASE_URL;
+    let connectionUrl = '';
+    
+    // Prefer individual PG* variables over DATABASE_URL if both exist
+    if (process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD && process.env.PGDATABASE) {
+      log('Using PG* environment variables for connection', 'postgres');
+      
+      const pgHost = process.env.PGHOST;
+      const pgUser = process.env.PGUSER;
+      const pgPassword = process.env.PGPASSWORD;
+      const pgDatabase = process.env.PGDATABASE;
+      const pgPort = process.env.PGPORT || '5432';
+      
+      // Construct connection URL from PG* variables
+      connectionUrl = `postgresql://${pgUser}:${pgPassword}@${pgHost}:${pgPort}/${pgDatabase}`;
+      log(`Created connection URL from PG* variables to host: ${pgHost}`, 'postgres');
+    } else {
+      // Fall back to DATABASE_URL if PG* variables aren't complete
+      connectionUrl = process.env.DATABASE_URL as string;
+      log('Using DATABASE_URL environment variable for connection', 'postgres');
+    }
     
     // Detect database type
     const { isSupabase, isNeon } = detectDatabaseType(connectionUrl);
