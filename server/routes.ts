@@ -104,11 +104,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'network_links'
       ];
       
+      // Importiramo sve tablice iz shared/schema
+      const schema = await import('../shared/schema');
+      
       for (const tableName of tableNames) {
         try {
-          // Ovo je jednostavnije - koristimo direktno select()
-          const rows = await db.select().from(tableName).limit(10);
-          data[tableName] = rows || [];
+          // Koristimo tablice iz sheme ako postoje, inače preskačemo
+          if (schema[tableName]) {
+            const rows = await db.select().from(schema[tableName]).limit(10);
+            data[tableName] = rows || [];
+          } else {
+            console.log(`Tablica ${tableName} nije definirana u shemi`);
+            data[tableName] = [];
+          }
         } catch (err) {
           // Nastavljamo s drugim tablicama ako jedna ne postoji
           console.log(`Tablica ${tableName} nije dostupna: ${err}`);

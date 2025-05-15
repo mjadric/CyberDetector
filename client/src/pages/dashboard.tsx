@@ -61,7 +61,10 @@ export default function Dashboard() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => queryClient.setQueryData(['/api/time-range'], "1h")}
+              onClick={() => { 
+                queryClient.setQueryData(['/api/time-range'], "1h");
+                handleRefresh();
+              }}
               className="flex items-center"
             >
               1h
@@ -69,7 +72,10 @@ export default function Dashboard() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => queryClient.setQueryData(['/api/time-range'], "4h")}
+              onClick={() => {
+                queryClient.setQueryData(['/api/time-range'], "4h");
+                handleRefresh();
+              }}
               className="flex items-center"
             >
               4h
@@ -77,7 +83,10 @@ export default function Dashboard() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => queryClient.setQueryData(['/api/time-range'], "24h")}
+              onClick={() => {
+                queryClient.setQueryData(['/api/time-range'], "24h");
+                handleRefresh();
+              }}
               className="flex items-center"
             >
               24h
