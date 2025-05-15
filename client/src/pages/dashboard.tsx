@@ -12,25 +12,50 @@ import { useState, useEffect } from "react";
 
 export default function Dashboard() {
   const [timeRange, setTimeRange] = useState("Last 24 hours");
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshInterval, setRefreshInterval] = useState(5000); // 5 sekundi
+  
+  // Automatsko osvježavanje podataka u zadanom intervalu
+  useEffect(() => {
+    let intervalId: number;
+    
+    if (autoRefresh) {
+      intervalId = window.setInterval(() => {
+        console.log("Automatsko osvježavanje podataka...");
+        handleRefresh();
+      }, refreshInterval);
+    }
+    
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [autoRefresh, refreshInterval]);
   
   const { data: metrics, isLoading: isLoadingMetrics } = useQuery({
     queryKey: ['/api/metrics'],
+    refetchInterval: autoRefresh ? refreshInterval : false,
   });
   
   const { data: alerts, isLoading: isLoadingAlerts } = useQuery({
     queryKey: ['/api/alerts'],
+    refetchInterval: autoRefresh ? refreshInterval : false,
   });
   
-  const { data: traffic, isLoading: isLoadingTraffic } = useQuery({
+  const { data: traffic, isLoading: isLoadingTraffic } = useQuery<any>({
     queryKey: ['/api/traffic'],
+    refetchInterval: autoRefresh ? refreshInterval : false,
   });
   
-  const { data: protocols, isLoading: isLoadingProtocols } = useQuery({
+  const { data: protocols, isLoading: isLoadingProtocols } = useQuery<any[]>({
     queryKey: ['/api/protocols'],
+    refetchInterval: autoRefresh ? refreshInterval : false,
   });
   
-  const { data: ipAnalysis, isLoading: isLoadingIpAnalysis } = useQuery({
+  const { data: ipAnalysis, isLoading: isLoadingIpAnalysis } = useQuery<any[]>({
     queryKey: ['/api/ip-analysis'],
+    refetchInterval: autoRefresh ? refreshInterval : false,
   });
 
   const handleRefresh = () => {
@@ -52,6 +77,24 @@ export default function Dashboard() {
         </div>
         <div className="flex space-x-2">
           <Button 
+            variant={autoRefresh ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            className="flex items-center"
+          >
+            {autoRefresh ? (
+              <>
+                <div className="h-2 w-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
+                Auto-refresh ON
+              </>
+            ) : (
+              <>
+                <div className="h-2 w-2 rounded-full bg-slate-300 mr-2"></div>
+                Auto-refresh OFF
+              </>
+            )}
+          </Button>
+          <Button 
             variant="outline" 
             size="sm"
             onClick={handleRefresh}
@@ -72,13 +115,13 @@ export default function Dashboard() {
       </div>
       
       {/* Alert Panel */}
-      {!isLoadingAlerts && alerts && alerts.length > 0 && (
+      {!isLoadingAlerts && alerts && Array.isArray(alerts) && alerts.length > 0 && (
         <AlertPanel alert={alerts[0]} />
       )}
       
       {/* Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {!isLoadingMetrics && metrics && metrics.map((metric: any) => (
+        {!isLoadingMetrics && metrics && Array.isArray(metrics) && metrics.map((metric: any) => (
           <StatusCard key={metric.id} data={metric} />
         ))}
       </div>
@@ -94,7 +137,7 @@ export default function Dashboard() {
         
         {/* Protocol Distribution */}
         <div className="bg-card rounded-lg p-4">
-          {!isLoadingProtocols && protocols && (
+          {!isLoadingProtocols && protocols && Array.isArray(protocols) && (
             <ProtocolChart data={protocols} />
           )}
         </div>
@@ -104,14 +147,14 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Alert History */}
         <div className="bg-card rounded-lg p-4 lg:col-span-2">
-          {!isLoadingAlerts && alerts && (
+          {!isLoadingAlerts && alerts && Array.isArray(alerts) && (
             <AlertHistory alerts={alerts} />
           )}
         </div>
         
         {/* IP Analysis */}
         <div className="bg-card rounded-lg p-4">
-          {!isLoadingIpAnalysis && ipAnalysis && (
+          {!isLoadingIpAnalysis && ipAnalysis && Array.isArray(ipAnalysis) && (
             <IpAnalysis ipAnalysis={ipAnalysis} />
           )}
         </div>
