@@ -41,9 +41,8 @@ from .mongodb import (
     get_dataset_statistics
 )
 
-# PostgreSQL moduli će se dodati kasnije
-
-# Neo4j moduli će se dodati kasnije
+# PostgreSQL moduli - još nisu implementirani
+# Neo4j moduli - još nisu implementirani
 
 # Funkcija za provjeru statusa baza podataka
 def check_database_status():
