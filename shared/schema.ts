@@ -80,6 +80,24 @@ export const insertNetworkMetricsSchema = createInsertSchema(networkMetrics).omi
 export type InsertNetworkMetrics = z.infer<typeof insertNetworkMetricsSchema>;
 export type NetworkMetrics = typeof networkMetrics.$inferSelect;
 
+// DashboardMetrics table for simplified dashboard display
+export const dashboardMetrics = pgTable("dashboard_metrics", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  value: text("value").notNull(),
+  change_percent: real("change_percent"),
+  trend: text("trend"),
+  created_at: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertDashboardMetricsSchema = createInsertSchema(dashboardMetrics).omit({
+  id: true,
+  created_at: true,
+});
+
+export type InsertDashboardMetrics = z.infer<typeof insertDashboardMetricsSchema>;
+export type DashboardMetrics = typeof dashboardMetrics.$inferSelect;
+
 // TrafficPath table
 export const trafficPaths = pgTable("traffic_paths", {
   id: serial("id").primaryKey(),

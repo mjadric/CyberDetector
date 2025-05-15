@@ -7,6 +7,7 @@ import {
   networkTraffic, type NetworkTraffic, type InsertNetworkTraffic,
   alerts, type Alert, type InsertAlert,
   networkMetrics, type NetworkMetrics, type InsertNetworkMetrics,
+  dashboardMetrics, type DashboardMetrics, type InsertDashboardMetrics,
   trafficPaths, type TrafficPath, type InsertTrafficPath,
   networkNodes, type NetworkNode, type InsertNetworkNode,
   networkLinks, type NetworkLink, type InsertNetworkLink
@@ -175,6 +176,28 @@ async function createTables() {
       await sql`
         CREATE TABLE IF NOT EXISTS network_metrics (
           id SERIAL PRIMARY KEY,
+          timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          traffic_volume INTEGER NOT NULL,
+          packet_rate INTEGER NOT NULL,
+          syn_ratio REAL NOT NULL,
+          source_entropy REAL NOT NULL,
+          destination_entropy REAL NOT NULL,
+          unique_src_ips INTEGER NOT NULL,
+          unique_dst_ips INTEGER NOT NULL,
+          protocol_distribution JSONB NOT NULL,
+          threat_level VARCHAR(50) NOT NULL
+        )
+      `;
+      log('Created network_metrics table', 'postgres');
+    } catch (error) {
+      log(`Error creating network_metrics table: ${error}`, 'postgres');
+    }
+    
+    // Create dashboard_metrics table for simplified dashboard display
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS dashboard_metrics (
+          id SERIAL PRIMARY KEY,
           name VARCHAR(255) NOT NULL,
           value VARCHAR(255) NOT NULL,
           change_percent DECIMAL(5,2),
@@ -182,9 +205,9 @@ async function createTables() {
           created_at TIMESTAMPTZ DEFAULT NOW()
         )
       `;
-      log('Created network_metrics table', 'postgres');
+      log('Created dashboard_metrics table', 'postgres');
     } catch (error) {
-      log(`Error creating network_metrics table: ${error}`, 'postgres');
+      log(`Error creating dashboard_metrics table: ${error}`, 'postgres');
     }
     
     // Create network_traffic table
@@ -317,6 +340,39 @@ export async function insertNetworkMetric(metric: InsertNetworkMetrics): Promise
     return result[0] || null;
   } catch (error) {
     log(`Error inserting network metric: ${error}`, 'postgres');
+    return null;
+  }
+}
+
+/**
+ * Get all dashboard metrics
+ */
+export async function getDashboardMetrics(): Promise<DashboardMetrics[]> {
+  if (!db) {
+    throw new Error('Database not initialized');
+  }
+  
+  try {
+    return await db.select().from(dashboardMetrics).orderBy(dashboardMetrics.id);
+  } catch (error) {
+    log(`Error getting dashboard metrics: ${error}`, 'postgres');
+    return [];
+  }
+}
+
+/**
+ * Insert a new dashboard metric
+ */
+export async function insertDashboardMetric(metric: InsertDashboardMetrics): Promise<DashboardMetrics | null> {
+  if (!db) {
+    throw new Error('Database not initialized');
+  }
+  
+  try {
+    const result = await db.insert(dashboardMetrics).values(metric).returning();
+    return result[0] || null;
+  } catch (error) {
+    log(`Error inserting dashboard metric: ${error}`, 'postgres');
     return null;
   }
 }
