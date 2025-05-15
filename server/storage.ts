@@ -1,5 +1,12 @@
 import { 
-  users, 
+  users,
+  networkTraffic,
+  alerts,
+  networkMetrics, 
+  dashboardMetrics,
+  trafficPaths,
+  networkNodes,
+  networkLinks,
   type User, 
   type InsertUser,
   type NetworkTraffic,
@@ -1665,4 +1672,665 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// New Database Storage implementation that uses PostgreSQL
+import { db } from "./db";
+import { eq } from "drizzle-orm";
+
+export class DatabaseStorage implements IStorage {
+  /**
+   * Initialize database storage
+   */
+  constructor() {
+    // Database connections were already initialized in the server
+  }
+
+  // User management
+  async getUser(id: number): Promise<User | undefined> {
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, id));
+      return user || undefined;
+    } catch (error) {
+      log(`Error getting user by ID from database: ${error}`, 'storage');
+      return undefined;
+    }
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    try {
+      const [user] = await db.select().from(users).where(eq(users.username, username));
+      return user || undefined;
+    } catch (error) {
+      log(`Error getting user by username from database: ${error}`, 'storage');
+      return undefined;
+    }
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    try {
+      const [user] = await db.insert(users).values(insertUser).returning();
+      return user;
+    } catch (error) {
+      log(`Error creating user in database: ${error}`, 'storage');
+      throw new Error(`Failed to create user: ${error}`);
+    }
+  }
+
+  // For now, forward the remaining methods to the MemStorage instance
+  // We'll gradually replace these with PostgreSQL implementations
+  private memStorage = new MemStorage();
+
+  async getLatestNetworkMetrics(): Promise<any> {
+    try {
+      // First try to get metrics from PostgreSQL
+      if (dbStatus.postgresConnected) {
+        // Use the existing PostgreSQL function
+        const pgMetrics = await pgGetNetworkMetrics();
+        
+        if (pgMetrics.length > 0) {
+          // Format the metrics for the frontend
+          const formattedMetrics = pgMetrics.map((metric, index) => {
+            let icon = 'device_hub';
+            let color = 'text-[#3B82F6]';
+            
+            if (metric.name.includes('Packet')) {
+              icon = 'speed';
+              color = 'text-[#10B981]';
+            } else if (metric.name.includes('Threat')) {
+              icon = 'shield';
+              color = 'text-[#EF4444]';
+            } else if (metric.name.includes('Entropy')) {
+              icon = 'data_usage';
+              color = 'text-[#F59E0B]';
+            } else if (metric.name.includes('IP')) {
+              icon = 'lan';
+              color = 'text-[#5D3FD3]';
+            }
+            
+            // Format trend as change string
+            const changeStr = metric.trend === 'up' 
+              ? `+${metric.change_percent?.toFixed(0) || 0}%` 
+              : metric.trend === 'down' 
+                ? `-${metric.change_percent?.toFixed(0) || 0}%` 
+                : '0%';
+            
+            return {
+              id: index + 1,
+              name: metric.name,
+              value: metric.value,
+              change: changeStr,
+              icon,
+              color
+            };
+          });
+          
+          log('Using PostgreSQL data for network metrics', 'storage');
+          return formattedMetrics;
+        }
+        
+        // If no data in PostgreSQL, try to seed it
+        log('No metrics found in PostgreSQL, seeding data...', 'storage');
+        if (dbStatus.mongoConnected) {
+          // Try to seed from MongoDB
+          await this.seedPostgreSQLMetricsFromMongoDB();
+        } else {
+          // Otherwise seed with some initial data
+          await this.seedPostgreSQLMetrics();
+        }
+        
+        // Try again after seeding
+        const newPgMetrics = await pgGetNetworkMetrics();
+        if (newPgMetrics.length > 0) {
+          // Format the metrics the same way as above
+          const formattedMetrics = newPgMetrics.map((metric, index) => {
+            let icon = 'device_hub';
+            let color = 'text-[#3B82F6]';
+            
+            if (metric.name.includes('Packet')) {
+              icon = 'speed';
+              color = 'text-[#10B981]';
+            } else if (metric.name.includes('Threat')) {
+              icon = 'shield';
+              color = 'text-[#EF4444]';
+            } else if (metric.name.includes('Entropy')) {
+              icon = 'data_usage';
+              color = 'text-[#F59E0B]';
+            } else if (metric.name.includes('IP')) {
+              icon = 'lan';
+              color = 'text-[#5D3FD3]';
+            }
+            
+            // Format trend as change string
+            const changeStr = metric.trend === 'up' 
+              ? `+${metric.change_percent?.toFixed(0) || 0}%` 
+              : metric.trend === 'down' 
+                ? `-${metric.change_percent?.toFixed(0) || 0}%` 
+                : '0%';
+            
+            return {
+              id: index + 1,
+              name: metric.name,
+              value: metric.value,
+              change: changeStr,
+              icon,
+              color
+            };
+          });
+          
+          log('Using newly seeded PostgreSQL data for network metrics', 'storage');
+          return formattedMetrics;
+        }
+      }
+      
+      // If PostgreSQL is not available or seeding failed, fall back to MemStorage
+      log('Falling back to memory storage for network metrics', 'storage');
+      return this.memStorage.getLatestNetworkMetrics();
+    } catch (error) {
+      log(`Error in getLatestNetworkMetrics: ${error}`, 'storage');
+      return this.memStorage.getLatestNetworkMetrics();
+    }
+  }
+  
+  /**
+   * Seed PostgreSQL with metrics data from MongoDB
+   */
+  private async seedPostgreSQLMetricsFromMongoDB(): Promise<void> {
+    if (!dbStatus.postgresConnected || !dbStatus.mongoConnected) return;
+    
+    try {
+      log('Seeding PostgreSQL metrics from MongoDB...', 'storage');
+      
+      // Get data from MongoDB
+      const timeSeriesData = await aggregateTimeSeriesData(5);
+      
+      if (timeSeriesData.length > 0) {
+        // Create metrics based on the latest data point
+        const latest = timeSeriesData[timeSeriesData.length - 1];
+        
+        // Insert network load
+        await pgInsertNetworkMetric({
+          name: "Network Load",
+          value: `${Math.round(latest.metrics.packet_count / 100)}%`,
+          trend: "up",
+          change_percent: 12
+        });
+        
+        // Insert packet rate
+        await pgInsertNetworkMetric({
+          name: "Packet Rate",
+          value: `${latest.metrics.packet_count.toLocaleString()} p/s`,
+          trend: "up",
+          change_percent: 8
+        });
+        
+        // Insert threat level
+        let threatLevel = "Low";
+        if (latest.is_anomaly) {
+          threatLevel = latest.anomaly_score && latest.anomaly_score > 0.7 ? "High" : "Medium";
+        }
+        
+        await pgInsertNetworkMetric({
+          name: "Threat Level",
+          value: threatLevel,
+          trend: latest.is_anomaly ? "up" : "down",
+          change_percent: 15
+        });
+        
+        // Insert entropy
+        await pgInsertNetworkMetric({
+          name: "Source IP Entropy",
+          value: latest.metrics.entropy_src_ip.toFixed(2),
+          trend: "down",
+          change_percent: 5
+        });
+        
+        // Insert unique IPs
+        await pgInsertNetworkMetric({
+          name: "Unique IPs",
+          value: `${latest.metrics.unique_source_ips}`,
+          trend: "up",
+          change_percent: 3
+        });
+        
+        log('Successfully seeded PostgreSQL metrics from MongoDB', 'storage');
+      } else {
+        log('No time series data available in MongoDB', 'storage');
+      }
+    } catch (error) {
+      log(`Error seeding PostgreSQL metrics from MongoDB: ${error}`, 'storage');
+    }
+  }
+  
+  /**
+   * Seed PostgreSQL with basic metrics data
+   */
+  private async seedPostgreSQLMetrics(): Promise<void> {
+    if (!dbStatus.postgresConnected) return;
+    
+    try {
+      log('Seeding PostgreSQL with initial metrics data...', 'storage');
+      
+      // Insert network load
+      await pgInsertNetworkMetric({
+        name: "Network Load",
+        value: "72%",
+        trend: "up",
+        change_percent: 12
+      });
+      
+      // Insert packet rate
+      await pgInsertNetworkMetric({
+        name: "Packet Rate",
+        value: "8.5K p/s",
+        trend: "up",
+        change_percent: 8
+      });
+      
+      // Insert threat level
+      await pgInsertNetworkMetric({
+        name: "Threat Level",
+        value: "Medium",
+        trend: "up",
+        change_percent: 15
+      });
+      
+      // Insert entropy
+      await pgInsertNetworkMetric({
+        name: "Source IP Entropy",
+        value: "3.75",
+        trend: "down",
+        change_percent: 5
+      });
+      
+      // Insert unique IPs
+      await pgInsertNetworkMetric({
+        name: "Unique IPs",
+        value: "128",
+        trend: "up",
+        change_percent: 3
+      });
+      
+      log('Successfully seeded PostgreSQL with initial metrics data', 'storage');
+    } catch (error) {
+      log(`Error seeding PostgreSQL metrics: ${error}`, 'storage');
+    }
+  }
+
+  async getTrafficData(): Promise<any> {
+    try {
+      // First try to use MongoDB data as it's more suited for time-series traffic data
+      if (dbStatus.mongoConnected) {
+        try {
+          const now = new Date();
+          const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+          
+          // Get traffic data from the last hour
+          const trafficData = await networkTrafficCollection.find({
+            timestamp: { $gte: oneHourAgo }
+          }).toArray();
+          
+          if (trafficData.length > 0) {
+            // Process data for the chart by aggregating into 5-minute intervals
+            const intervals = 12; // 12 intervals of 5 minutes each = 1 hour
+            const intervalData: { [key: string]: { normal: number, attack: number } } = {};
+            
+            // Initialize intervals
+            for (let i = 0; i < intervals; i++) {
+              const time = new Date(now.getTime() - (intervals - i - 1) * 5 * 60 * 1000);
+              const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              intervalData[timeStr] = { normal: 0, attack: 0 };
+            }
+            
+            // Group data by time intervals
+            trafficData.forEach(traffic => {
+              const time = new Date(traffic.timestamp);
+              const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              
+              if (intervalData[timeStr]) {
+                if (traffic.is_anomaly) {
+                  intervalData[timeStr].attack += 1;
+                } else {
+                  intervalData[timeStr].normal += 1;
+                }
+              }
+            });
+            
+            // Prepare data for chart
+            const labels = Object.keys(intervalData);
+            const normalData = labels.map(label => intervalData[label].normal);
+            const attackData = labels.map(label => intervalData[label].attack);
+            
+            log('Using MongoDB data for traffic chart', 'storage');
+            return {
+              labels,
+              normalData,
+              attackData
+            };
+          }
+        } catch (error) {
+          log(`Error getting traffic data from MongoDB: ${error}`, 'storage');
+        }
+      }
+      
+      // Try to get data from PostgreSQL if MongoDB failed or isn't available
+      if (dbStatus.postgresConnected) {
+        try {
+          // Get data from the network_traffic table in PostgreSQL
+          const trafficData = await db.select().from(networkTraffic)
+            .orderBy(networkTraffic.timestamp)
+            .limit(1000);
+          
+          if (trafficData.length > 0) {
+            // Process data for the chart by aggregating into intervals
+            const now = new Date();
+            const intervals = 12;
+            const intervalData: { [key: string]: { normal: number, attack: number } } = {};
+            
+            // Initialize intervals
+            for (let i = 0; i < intervals; i++) {
+              const time = new Date(now.getTime() - (intervals - i - 1) * 5 * 60 * 1000);
+              const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              intervalData[timeStr] = { normal: 0, attack: 0 };
+            }
+            
+            // Group data by time intervals
+            trafficData.forEach(traffic => {
+              if (!traffic.timestamp) return;
+              
+              const time = new Date(traffic.timestamp);
+              const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              
+              if (intervalData[timeStr]) {
+                if (traffic.isAttack) {
+                  intervalData[timeStr].attack += 1;
+                } else {
+                  intervalData[timeStr].normal += 1;
+                }
+              }
+            });
+            
+            // Prepare data for chart
+            const labels = Object.keys(intervalData);
+            const normalData = labels.map(label => intervalData[label].normal);
+            const attackData = labels.map(label => intervalData[label].attack);
+            
+            log('Using PostgreSQL data for traffic chart', 'storage');
+            return {
+              labels,
+              normalData,
+              attackData
+            };
+          } else {
+            // If no data in PostgreSQL, try to seed it
+            log('No traffic data found in PostgreSQL, seeding...', 'storage');
+            await this.seedPostgreSQLTrafficData();
+            
+            // Recursive call to get the newly seeded data
+            return this.getTrafficData();
+          }
+        } catch (error) {
+          log(`Error getting traffic data from PostgreSQL: ${error}`, 'storage');
+        }
+      }
+      
+      // If all database attempts failed, fall back to MemStorage
+      log('Falling back to memory storage for traffic data', 'storage');
+      return this.memStorage.getTrafficData();
+    } catch (error) {
+      log(`Error in getTrafficData: ${error}`, 'storage');
+      return this.memStorage.getTrafficData();
+    }
+  }
+  
+  /**
+   * Seed PostgreSQL with network traffic data
+   */
+  private async seedPostgreSQLTrafficData(): Promise<void> {
+    if (!dbStatus.postgresConnected) return;
+    
+    try {
+      log('Seeding PostgreSQL with network traffic data...', 'storage');
+      
+      // Generate mock traffic data
+      const now = new Date();
+      const trafficData = [];
+      
+      // Generate data for the last hour (12 5-minute intervals)
+      for (let i = 0; i < 12; i++) {
+        const intervalTime = new Date(now.getTime() - (12 - i) * 5 * 60 * 1000);
+        
+        // For each interval, generate multiple traffic entries
+        const entriesCount = Math.floor(Math.random() * 20) + 10; // 10-30 entries per interval
+        
+        for (let j = 0; j < entriesCount; j++) {
+          // Randomize timestamp within the 5-minute interval
+          const timestamp = new Date(intervalTime.getTime() + Math.random() * 5 * 60 * 1000);
+          
+          // Random protocols
+          const protocols = ['tcp', 'udp', 'icmp'];
+          const protocol = protocols[Math.floor(Math.random() * protocols.length)];
+          
+          // Determine if this is attack traffic (10% chance after the 8th interval)
+          const isAttack = i >= 8 && Math.random() < 0.1;
+          
+          // Create traffic entry
+          trafficData.push({
+            timestamp,
+            sourceIp: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+            destinationIp: `10.0.0.${Math.floor(Math.random() * 10) + 1}`,
+            protocol,
+            packetSize: Math.floor(Math.random() * 1000) + 64,
+            synFlag: protocol === 'tcp' ? Math.random() < 0.5 : false,
+            sourcePort: Math.floor(Math.random() * 60000) + 1024,
+            destinationPort: Math.floor(Math.random() * 1000) + 1,
+            isAttack,
+            attackType: isAttack ? 'TCP SYN Flood' : null,
+          });
+        }
+      }
+      
+      // Insert data in batches to avoid overwhelming the database
+      const batchSize = 50;
+      for (let i = 0; i < trafficData.length; i += batchSize) {
+        const batch = trafficData.slice(i, i + batchSize);
+        await db.insert(networkTraffic).values(batch);
+      }
+      
+      log(`Successfully seeded PostgreSQL with ${trafficData.length} traffic entries`, 'storage');
+    } catch (error) {
+      log(`Error seeding PostgreSQL with traffic data: ${error}`, 'storage');
+    }
+  }
+
+  async getProtocolDistribution(): Promise<any> {
+    try {
+      // First try to get from MongoDB as it's more suited for traffic analysis
+      if (dbStatus.mongoConnected) {
+        try {
+          const now = new Date();
+          const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+          
+          // Get traffic data from the last hour
+          const trafficData = await networkTrafficCollection.find({
+            timestamp: { $gte: oneHourAgo }
+          }).toArray();
+          
+          if (trafficData.length > 0) {
+            // Count protocols
+            const protocolCounts: { [key: string]: number } = {};
+            let total = 0;
+            
+            trafficData.forEach(traffic => {
+              const protocol = traffic.protocol.toUpperCase();
+              protocolCounts[protocol] = (protocolCounts[protocol] || 0) + 1;
+              total++;
+            });
+            
+            // Convert to percentages and format for the chart
+            const protocolData = Object.entries(protocolCounts).map(([protocol, count]) => {
+              let color = '';
+              
+              switch (protocol) {
+                case 'TCP':
+                  color = 'rgba(59, 130, 246, 0.8)';
+                  break;
+                case 'UDP':
+                  color = 'rgba(16, 185, 129, 0.8)';
+                  break;
+                case 'ICMP':
+                  color = 'rgba(245, 158, 11, 0.8)';
+                  break;
+                case 'HTTP':
+                  color = 'rgba(139, 92, 246, 0.8)';
+                  break;
+                case 'HTTPS':
+                  color = 'rgba(236, 72, 153, 0.8)';
+                  break;
+                default:
+                  color = 'rgba(156, 163, 175, 0.8)';
+              }
+              
+              return {
+                protocol,
+                percentage: Math.round((count / total) * 100),
+                color
+              };
+            })
+            .sort((a, b) => b.percentage - a.percentage);
+            
+            log('Using MongoDB data for protocol distribution', 'storage');
+            return protocolData;
+          }
+        } catch (error) {
+          log(`Error getting protocol distribution from MongoDB: ${error}`, 'storage');
+        }
+      }
+      
+      // Try to get from PostgreSQL if MongoDB failed or isn't available
+      if (dbStatus.postgresConnected) {
+        try {
+          // Get data from the network_traffic table
+          const trafficData = await db.select().from(networkTraffic)
+            .orderBy(networkTraffic.timestamp)
+            .limit(1000);
+          
+          if (trafficData.length > 0) {
+            // Count protocols
+            const protocolCounts: { [key: string]: number } = {};
+            let total = 0;
+            
+            trafficData.forEach(traffic => {
+              if (!traffic.protocol) return;
+              
+              const protocol = traffic.protocol.toUpperCase();
+              protocolCounts[protocol] = (protocolCounts[protocol] || 0) + 1;
+              total++;
+            });
+            
+            // Convert to percentages and format for the chart
+            const protocolData = Object.entries(protocolCounts).map(([protocol, count]) => {
+              let color = '';
+              
+              switch (protocol) {
+                case 'TCP':
+                  color = 'rgba(59, 130, 246, 0.8)';
+                  break;
+                case 'UDP':
+                  color = 'rgba(16, 185, 129, 0.8)';
+                  break;
+                case 'ICMP':
+                  color = 'rgba(245, 158, 11, 0.8)';
+                  break;
+                case 'HTTP':
+                  color = 'rgba(139, 92, 246, 0.8)';
+                  break;
+                case 'HTTPS':
+                  color = 'rgba(236, 72, 153, 0.8)';
+                  break;
+                default:
+                  color = 'rgba(156, 163, 175, 0.8)';
+              }
+              
+              return {
+                protocol,
+                percentage: Math.round((count / total) * 100),
+                color
+              };
+            })
+            .sort((a, b) => b.percentage - a.percentage);
+            
+            log('Using PostgreSQL data for protocol distribution', 'storage');
+            return protocolData;
+          } else {
+            // If no data in PostgreSQL, we'll need to seed it
+            log('No traffic data found in PostgreSQL for protocol distribution, seeding...', 'storage');
+            await this.seedPostgreSQLTrafficData();
+            
+            // Recursive call to get the newly seeded data
+            return this.getProtocolDistribution();
+          }
+        } catch (error) {
+          log(`Error getting protocol distribution from PostgreSQL: ${error}`, 'storage');
+        }
+      }
+      
+      // If all database attempts failed, fall back to MemStorage
+      log('Falling back to memory storage for protocol distribution', 'storage');
+      return this.memStorage.getProtocolDistribution();
+    } catch (error) {
+      log(`Error in getProtocolDistribution: ${error}`, 'storage');
+      return this.memStorage.getProtocolDistribution();
+    }
+  }
+
+  async getRecentAlerts(): Promise<any> {
+    return this.memStorage.getRecentAlerts();
+  }
+
+  async getIpAnalysis(): Promise<any> {
+    return this.memStorage.getIpAnalysis();
+  }
+
+  async getFeatureImportance(): Promise<any> {
+    return this.memStorage.getFeatureImportance();
+  }
+
+  async getDetectionMetrics(): Promise<any> {
+    return this.memStorage.getDetectionMetrics();
+  }
+
+  async getEntropyData(): Promise<any> {
+    return this.memStorage.getEntropyData();
+  }
+
+  async getPatternAnalysis(): Promise<any> {
+    return this.memStorage.getPatternAnalysis();
+  }
+
+  async getAttackClassification(): Promise<any> {
+    return this.memStorage.getAttackClassification();
+  }
+
+  async getNetworkTopology(): Promise<any> {
+    return this.memStorage.getNetworkTopology();
+  }
+
+  async getTrafficPaths(): Promise<any> {
+    return this.memStorage.getTrafficPaths();
+  }
+
+  async getVulnerabilityAnalysis(): Promise<any> {
+    return this.memStorage.getVulnerabilityAnalysis();
+  }
+
+  async mitigateAttack(alertId: number): Promise<any> {
+    return this.memStorage.mitigateAttack(alertId);
+  }
+
+  async blockIp(ip: string): Promise<any> {
+    return this.memStorage.blockIp(ip);
+  }
+}
+
+// Choose which storage implementation to use
+const useDatabase = dbStatus.postgresConnected;
+export const storage = useDatabase ? new DatabaseStorage() : new MemStorage();
