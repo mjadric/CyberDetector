@@ -14,13 +14,21 @@ import {
 
 // Configure Neon client
 neonConfig.fetchConnectionCache = true;
+neonConfig.wsDefaultMaxLifetime = 60; // Configure WebSocket lifetime for better performance
 
 // Database connection
 let sql: ReturnType<typeof neon> | null = null;
 let db: ReturnType<typeof drizzle> | null = null;
 
-// Is this a Supabase connection?
-const isSupabase = process.env.DATABASE_URL?.includes('supabase.co') || false;
+/**
+ * Detect database type from connection URL
+ */
+function detectDatabaseType(url: string = '') {
+  return {
+    isSupabase: url.includes('supabase.co'),
+    isNeon: url.includes('neon.tech')
+  };
+}
 
 /**
  * Connect to PostgreSQL database
@@ -36,6 +44,9 @@ export async function connectToPostgres(): Promise<boolean> {
     
     let connectionUrl = process.env.DATABASE_URL;
     
+    // Detect database type
+    const { isSupabase, isNeon } = detectDatabaseType(connectionUrl);
+    
     // Special handling for Supabase connections
     if (isSupabase) {
       log('Detected Supabase connection', 'postgres');
@@ -47,7 +58,14 @@ export async function connectToPostgres(): Promise<boolean> {
           'unknown';
         log(`Attempting connection to ${hostname}`, 'postgres');
         
-        // Format URL correctly for Supabase using DIRECT CONNECTION format
+        // Format URL correctly for Supabase using CONNECTION POOLING format
+        // Add pgbouncer for connection pooling
+        if (!connectionUrl.includes('pgbouncer=')) {
+          connectionUrl += connectionUrl.includes('?') ? 
+            '&pgbouncer=true&connection_limit=1' : 
+            '?pgbouncer=true&connection_limit=1';
+        }
+        
         // Add sslmode=require for secure connection
         if (!connectionUrl.includes('sslmode=')) {
           connectionUrl += connectionUrl.includes('?') ? 
@@ -55,10 +73,34 @@ export async function connectToPostgres(): Promise<boolean> {
             '?sslmode=require';
         }
         
-        log('Added SSL mode requirement for Supabase connection', 'postgres');
+        log('Added connection pooling and SSL requirement for Supabase', 'postgres');
       } catch (e) {
         log(`Error parsing connection URL: ${e}`, 'postgres');
       }
+    }
+    
+    // Special handling for Neon connections
+    if (isNeon) {
+      log('Detected Neon connection', 'postgres');
+      
+      try {
+        // Extract the hostname for logging purposes only
+        const hostname = connectionUrl.includes('@') ? 
+          connectionUrl.split('@')[1].split('/')[0] : 
+          'unknown';
+        log(`Attempting connection to ${hostname}`, 'postgres');
+        
+        // Neon.tech works well with @neondatabase/serverless out of the box
+        // No specific modifications needed
+        log('Using standard Neon connection parameters', 'postgres');
+      } catch (e) {
+        log(`Error parsing connection URL: ${e}`, 'postgres');
+      }
+    }
+    
+    // Generic PostgreSQL connection
+    if (!isSupabase && !isNeon) {
+      log('Using generic PostgreSQL connection', 'postgres');
     }
     
     // Initialize Neon SQL client
