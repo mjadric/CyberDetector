@@ -37,10 +37,10 @@ export default function DatabaseExplorer() {
 
   // Query za status i statistiku baza
   const { data: dbStatus, isLoading: statusLoading } = useQuery({
-    queryKey: ["/api/python/status", refreshTrigger],
-    select: (data) => ({
-      status: data?.database?.status || { mongodb: false, postgresql: false, neo4j: false },
-      mongoStats: data?.database?.mongodb_stats || {}
+    queryKey: ["/api/python-status", refreshTrigger],
+    select: (data: any) => ({
+      status: data?.status?.database_connections || { mongodb: false, postgresql: false, neo4j: false },
+      mongoStats: data?.status?.mongodb_stats || {}
     })
   });
 
@@ -48,14 +48,14 @@ export default function DatabaseExplorer() {
   const { data: mongoData, isLoading: mongoLoading } = useQuery({
     queryKey: ["/api/database/mongodb", refreshTrigger],
     enabled: activeTab === "mongodb",
-    select: (data) => data || { collections: {} }
+    select: (data: any) => data || { collections: {} }
   });
 
   // Query za PostgreSQL podatke
   const { data: postgresData, isLoading: postgresLoading } = useQuery({
     queryKey: ["/api/database/postgresql", refreshTrigger],
     enabled: activeTab === "postgresql",
-    select: (data) => data || { tables: {} }
+    select: (data: any) => data || { tables: {} }
   });
 
   const handleRefresh = () => {
@@ -63,7 +63,7 @@ export default function DatabaseExplorer() {
   };
 
   const renderStatusBadge = (isConnected: boolean) => (
-    <Badge variant={isConnected ? "success" : "destructive"}>
+    <Badge variant={isConnected ? "default" : "destructive"} className={isConnected ? "bg-green-500 hover:bg-green-600" : ""}>
       {isConnected ? "Spojeno" : "Nije spojeno"}
     </Badge>
   );

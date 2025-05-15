@@ -8,6 +8,7 @@ import fs from "fs";
 import axios from "axios";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import { MongoClient } from 'mongodb';
 
 // Get current directory equivalent in ES module
 const __filename = fileURLToPath(import.meta.url);
@@ -47,6 +48,73 @@ function startPythonServer() {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+  
+  // Database explorer routes
+  app.get('/api/database/mongodb', async (req: Request, res: Response) => {
+    try {
+      // Attempt to connect to MongoDB
+      const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ddos_defender';
+      const client = new MongoClient(mongoUri);
+      await client.connect();
+      const db = client.db('ddos_defender');
+      
+      // Get collection names
+      const collections = await db.listCollections().toArray();
+      const collectionNames = collections.map((c: any) => c.name);
+      
+      // Get limited documents from each collection
+      const data: Record<string, any[]> = {};
+      
+      for (const collectionName of collectionNames) {
+        // Limit to 10 documents per collection to avoid overwhelming the frontend
+        const documents = await db.collection(collectionName)
+          .find({})
+          .sort({ _id: -1 }) // newest documents first
+          .limit(10)
+          .toArray();
+        
+        data[collectionName] = documents;
+      }
+      
+      await client.close();
+      res.json({ collections: data });
+    } catch (error) {
+      console.error(`Error fetching MongoDB data: ${error}`);
+      res.status(500).json({ error: `Failed to fetch MongoDB data: ${error}` });
+    }
+  });
+  
+  // PostgreSQL explorer route
+  app.get('/api/database/postgresql', async (req: Request, res: Response) => {
+    try {
+      const { db } = await import('./db');
+      
+      // Get table names from information_schema
+      const tablesQuery = await db.execute(
+        `SELECT table_name FROM information_schema.tables 
+         WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`
+      );
+      
+      const tableNames = tablesQuery.rows.map((row: any) => row.table_name);
+      
+      // Get limited rows from each table
+      const data: Record<string, any[]> = {};
+      
+      for (const tableName of tableNames) {
+        // Limit to 20 rows per table
+        const rows = await db.execute(
+          `SELECT * FROM "${tableName}" LIMIT 20`
+        );
+        
+        data[tableName] = rows.rows;
+      }
+      
+      res.json({ tables: data });
+    } catch (error) {
+      console.error(`Error fetching PostgreSQL data: ${error}`);
+      res.status(500).json({ error: `Failed to fetch PostgreSQL data: ${error}` });
+    }
+  });
   
   // Start Python backend server
   try {
