@@ -78,6 +78,18 @@ async function initializeDatabases() {
   const postgresConnected = await connectToPostgres();
   if (postgresConnected) {
     log('PostgreSQL connection established', 'postgres');
+    
+    // Check if we need to reset the database
+    if (process.env.RESET_DATABASE === 'true') {
+      try {
+        const { resetDatabase } = await import('./database/postgres');
+        log('Resetting PostgreSQL database due to RESET_DATABASE=true env variable', 'postgres');
+        const result = await resetDatabase();
+        log(`PostgreSQL database reset ${result ? 'successful' : 'failed'}`, 'postgres');
+      } catch (resetError) {
+        log(`Error resetting database: ${resetError}`, 'postgres');
+      }
+    }
   } else {
     log('PostgreSQL connection failed - continuing without PostgreSQL', 'postgres');
   }

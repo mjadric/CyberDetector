@@ -306,6 +306,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to run analysis" });
     }
   });
+  
+  // Database maintenance route (admin only)
+  app.post("/api/admin/reset-database", async (req, res) => {
+    try {
+      // This should be protected with proper authentication in production
+      // Import the resetDatabase function
+      const { resetDatabase } = await import('./database/postgres');
+      
+      // Reset the database
+      const result = await resetDatabase();
+      
+      if (result) {
+        // Set environment variable for the current process only
+        process.env.RESET_DATABASE = 'true';
+        res.json({ success: true, message: 'Database reset successfully' });
+      } else {
+        res.status(500).json({ success: false, message: 'Failed to reset database' });
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: (error as Error).message });
+    }
+  });
+  
+  // Configure Neo4j connection
+  app.post("/api/admin/configure-neo4j", async (req, res) => {
+    try {
+      const schema = z.object({
+        uri: z.string().min(1),
+        username: z.string().min(1),
+        password: z.string().min(1)
+      });
+      
+      const validatedData = schema.parse(req.body);
+      
+      // Set environment variables
+      process.env.NEO4J_URI = validatedData.uri;
+      process.env.NEO4J_USERNAME = validatedData.username;
+      process.env.NEO4J_PASSWORD = validatedData.password;
+      
+      // Import Neo4j module
+      const { connectToNeo4j, initializeSchema } = await import('./database/neo4j');
+      
+      // Try connection
+      const connected = await connectToNeo4j();
+      
+      if (connected) {
+        // Initialize Neo4j schema
+        await initializeSchema();
+        
+        // Update database status
+        const { setDatabaseConnectionStatus } = await import('./storage');
+        setDatabaseConnectionStatus('neo4j', true);
+        
+        res.json({ 
+          success: true, 
+          message: 'Neo4j connection configured successfully' 
+        });
+      } else {
+        res.status(500).json({ 
+          success: false, 
+          message: 'Failed to connect to Neo4j with provided credentials' 
+        });
+      }
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: (error as Error).message 
+      });
+    }
+  });
+  
+  // Get database connection status
+  app.get("/api/admin/database-status", async (req, res) => {
+    try {
+      const { getDatabaseConnectionStatus } = await import('./storage');
+      res.json(getDatabaseConnectionStatus());
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: (error as Error).message 
+      });
+    }
+  });
 
   return httpServer;
 }
