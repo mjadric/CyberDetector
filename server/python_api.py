@@ -337,24 +337,317 @@ def mitigate_attack():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+class NetworkTrafficSimulator:
+    """
+    Sophisticated network traffic simulator for generating realistic traffic patterns
+    and attack scenarios for testing detection algorithms.
+    """
+    
+    def __init__(self):
+        self.traffic_patterns = {
+            "normal": {
+                "source_entropy": (0.4, 0.6),      # Lower entropy - fewer source IPs
+                "destination_entropy": (0.4, 0.6),  # Lower entropy - consistent destinations
+                "syn_ratio": (0.1, 0.3),           # Normal SYN ratio
+                "traffic_volume": (0.3, 0.7),      # Moderate traffic volume
+                "packet_rate": (0.3, 0.6),         # Moderate packet rate
+                "unique_src_ips": (0.3, 0.6),      # Moderate number of source IPs
+                "unique_dst_ips": (0.4, 0.7),      # Moderate number of destination IPs
+                "protocol_distribution": {
+                    "TCP": (0.5, 0.7),
+                    "UDP": (0.2, 0.3),
+                    "ICMP": (0.05, 0.1),
+                    "HTTP": (0.1, 0.2),
+                    "HTTPS": (0.05, 0.1)
+                }
+            },
+            "syn_flood": {
+                "source_entropy": (0.7, 0.9),      # Higher entropy - many random source IPs
+                "destination_entropy": (0.1, 0.3),  # Lower entropy - targeted destinations
+                "syn_ratio": (0.7, 0.9),           # Very high SYN ratio
+                "traffic_volume": (0.7, 0.9),      # High traffic volume
+                "packet_rate": (0.8, 0.95),        # Very high packet rate
+                "unique_src_ips": (0.7, 0.9),      # Many source IPs (spoofed)
+                "unique_dst_ips": (0.1, 0.3),      # Few destination IPs (targets)
+                "protocol_distribution": {
+                    "TCP": (0.8, 0.95),
+                    "UDP": (0.05, 0.1),
+                    "ICMP": (0.0, 0.05),
+                    "HTTP": (0.0, 0.05),
+                    "HTTPS": (0.0, 0.05)
+                }
+            },
+            "udp_flood": {
+                "source_entropy": (0.7, 0.9),      # Higher entropy - many source IPs
+                "destination_entropy": (0.1, 0.3),  # Lower entropy - targeted destinations
+                "syn_ratio": (0.1, 0.2),           # Low SYN ratio (UDP doesn't use SYN)
+                "traffic_volume": (0.8, 0.95),     # Very high traffic volume
+                "packet_rate": (0.8, 0.95),        # Very high packet rate
+                "unique_src_ips": (0.6, 0.8),      # Many source IPs (spoofed)
+                "unique_dst_ips": (0.1, 0.3),      # Few destination IPs (targets)
+                "protocol_distribution": {
+                    "TCP": (0.0, 0.1),
+                    "UDP": (0.8, 0.95),
+                    "ICMP": (0.0, 0.05),
+                    "HTTP": (0.0, 0.05),
+                    "HTTPS": (0.0, 0.05)
+                }
+            },
+            "http_flood": {
+                "source_entropy": (0.5, 0.7),      # Moderate source entropy
+                "destination_entropy": (0.1, 0.3),  # Lower entropy - targeted web servers
+                "syn_ratio": (0.3, 0.5),           # Moderate SYN ratio (HTTP uses TCP)
+                "traffic_volume": (0.6, 0.9),      # High traffic volume
+                "packet_rate": (0.6, 0.8),         # High packet rate
+                "unique_src_ips": (0.4, 0.7),      # Moderate number of source IPs
+                "unique_dst_ips": (0.1, 0.3),      # Few destination IPs (web servers)
+                "protocol_distribution": {
+                    "TCP": (0.2, 0.4),
+                    "UDP": (0.0, 0.1),
+                    "ICMP": (0.0, 0.05),
+                    "HTTP": (0.5, 0.7),
+                    "HTTPS": (0.1, 0.2)
+                }
+            },
+            "slowloris": {
+                "source_entropy": (0.3, 0.5),      # Lower entropy - fewer sources
+                "destination_entropy": (0.1, 0.2),  # Very targeted - specific web servers
+                "syn_ratio": (0.2, 0.4),           # Moderate SYN ratio
+                "traffic_volume": (0.2, 0.4),      # Lower traffic volume
+                "packet_rate": (0.2, 0.4),         # Lower packet rate (slow!)
+                "unique_src_ips": (0.2, 0.4),      # Fewer source IPs
+                "unique_dst_ips": (0.1, 0.2),      # Very few destination IPs
+                "protocol_distribution": {
+                    "TCP": (0.3, 0.5),
+                    "UDP": (0.0, 0.1),
+                    "ICMP": (0.0, 0.05),
+                    "HTTP": (0.4, 0.6),
+                    "HTTPS": (0.1, 0.2)
+                }
+            },
+            "dns_amplification": {
+                "source_entropy": (0.2, 0.4),      # Lower entropy - spoofed source IPs
+                "destination_entropy": (0.1, 0.3),  # Lower entropy - targeted victims
+                "syn_ratio": (0.1, 0.2),           # Low SYN ratio (UDP doesn't use SYN)
+                "traffic_volume": (0.7, 0.9),      # High traffic volume
+                "packet_rate": (0.6, 0.8),         # High packet rate
+                "unique_src_ips": (0.1, 0.3),      # Few source IPs (DNS servers)
+                "unique_dst_ips": (0.1, 0.2),      # Very few destination IPs (victims)
+                "protocol_distribution": {
+                    "TCP": (0.0, 0.1),
+                    "UDP": (0.8, 0.95),
+                    "ICMP": (0.0, 0.05),
+                    "HTTP": (0.0, 0.05),
+                    "HTTPS": (0.0, 0.05)
+                }
+            }
+        }
+    
+    def generate_traffic_state(self, traffic_type="normal", intensity=0.5):
+        """
+        Generate network traffic state based on specified pattern type and intensity
+        
+        Args:
+            traffic_type (str): Type of traffic pattern (normal, syn_flood, etc.)
+            intensity (float): Intensity factor (0.0-1.0) to adjust pattern strength
+            
+        Returns:
+            dict: Traffic state parameters
+        """
+        # Default to normal traffic if type not found
+        if traffic_type not in self.traffic_patterns:
+            traffic_type = "normal"
+            
+        pattern = self.traffic_patterns[traffic_type]
+        
+        # Generate state with values adjusted by intensity
+        state = {}
+        for key, (min_val, max_val) in pattern.items():
+            if key != "protocol_distribution":
+                # Scale based on intensity
+                if traffic_type == "normal":
+                    # For normal traffic, intensity doesn't amplify
+                    state[key] = random.uniform(min_val, max_val)
+                else:
+                    # For attack traffic, higher intensity means values closer to max
+                    range_size = max_val - min_val
+                    adjusted_min = min_val + (range_size * (1 - intensity) * 0.5)
+                    adjusted_max = max_val - (range_size * (1 - intensity) * 0.5)
+                    state[key] = random.uniform(adjusted_min, adjusted_max)
+        
+        # Generate protocol distribution
+        protocols = {}
+        for protocol, (min_val, max_val) in pattern["protocol_distribution"].items():
+            if traffic_type == "normal":
+                protocols[protocol] = random.uniform(min_val, max_val)
+            else:
+                range_size = max_val - min_val
+                adjusted_min = min_val + (range_size * (1 - intensity) * 0.5)
+                adjusted_max = max_val - (range_size * (1 - intensity) * 0.5)
+                protocols[protocol] = random.uniform(adjusted_min, adjusted_max)
+        
+        # Normalize protocol distribution to sum to 1.0
+        total = sum(protocols.values())
+        if total > 0:
+            for protocol in protocols:
+                protocols[protocol] /= total
+                
+        state["protocol_distribution"] = protocols
+        state["traffic_type"] = traffic_type
+        state["intensity"] = intensity
+        state["timestamp"] = datetime.now().isoformat()
+        
+        return state
+    
+    def generate_traffic_features(self, traffic_type="normal", intensity=0.5):
+        """
+        Generate feature vector for DDQN input based on traffic type
+        
+        Args:
+            traffic_type (str): Type of traffic pattern
+            intensity (float): Intensity factor
+            
+        Returns:
+            list: Feature vector for DDQN input
+        """
+        state = self.generate_traffic_state(traffic_type, intensity)
+        
+        # Extract the 8 features used by DDQN in order
+        features = [
+            state.get("source_entropy", 0.5),
+            state.get("destination_entropy", 0.5),
+            state.get("syn_ratio", 0.5),
+            state.get("traffic_volume", 0.5),
+            state.get("packet_rate", 0.5),
+            state.get("unique_src_ips", 0.5),
+            state.get("unique_dst_ips", 0.5),
+            # Calculate a single value for protocol distribution imbalance
+            sum(abs(v - 0.2) for v in state.get("protocol_distribution", {}).values()) / 5.0
+        ]
+        
+        return features
+    
+    def generate_training_data(self, num_samples=100, attack_ratio=0.5):
+        """
+        Generate mixed training data with normal and attack traffic
+        
+        Args:
+            num_samples (int): Number of samples to generate
+            attack_ratio (float): Ratio of attack samples (0.0-1.0)
+            
+        Returns:
+            list: List of (features, is_attack) tuples
+        """
+        samples = []
+        
+        # Calculate number of attack samples
+        num_attack = int(num_samples * attack_ratio)
+        num_normal = num_samples - num_attack
+        
+        # Generate normal traffic samples
+        for _ in range(num_normal):
+            features = self.generate_traffic_features("normal", random.uniform(0.3, 0.7))
+            samples.append((features, False))
+        
+        # Generate attack traffic samples (different types)
+        attack_types = list(self.traffic_patterns.keys())
+        attack_types.remove("normal")
+        
+        for _ in range(num_attack):
+            attack_type = random.choice(attack_types)
+            intensity = random.uniform(0.6, 1.0)  # Higher intensity for attacks
+            features = self.generate_traffic_features(attack_type, intensity)
+            samples.append((features, True))
+        
+        # Shuffle the samples
+        random.shuffle(samples)
+        
+        return samples
+    
+    def simulate_attack_traffic(self, attack_type="syn_flood", duration=60, intensity=0.8):
+        """
+        Simulate attack traffic and save to MongoDB if available
+        
+        Args:
+            attack_type (str): Type of attack to simulate
+            duration (int): Duration in seconds
+            intensity (float): Attack intensity (0.0-1.0)
+            
+        Returns:
+            dict: Simulation details and results
+        """
+        # Generate attack state
+        attack_state = self.generate_traffic_state(attack_type, intensity)
+        attack_features = self.generate_traffic_features(attack_type, intensity)
+        
+        # Save to MongoDB if available
+        if MONGO_AVAILABLE:
+            try:
+                client = MongoClient(os.environ.get('MONGODB_URI', 'mongodb://localhost:27017'))
+                db = client.get_database('ddos_defender')
+                traffic_collection = db.get_collection('network_traffic')
+                
+                # Create traffic document
+                traffic_doc = {
+                    "timestamp": datetime.now(),
+                    "source_entropy": attack_state["source_entropy"],
+                    "destination_entropy": attack_state["destination_entropy"],
+                    "syn_ratio": attack_state["syn_ratio"],
+                    "traffic_volume": attack_state["traffic_volume"],
+                    "packet_rate": attack_state["packet_rate"],
+                    "unique_src_ips": attack_state["unique_src_ips"],
+                    "unique_dst_ips": attack_state["unique_dst_ips"],
+                    "protocol_distribution": attack_state["protocol_distribution"],
+                    "traffic_type": attack_type,
+                    "is_attack": True,
+                    "intensity": intensity,
+                    "duration": duration,
+                    "simulated": True
+                }
+                
+                # Insert into MongoDB
+                traffic_collection.insert_one(traffic_doc)
+                
+                client.close()
+                mongodb_saved = True
+            except Exception as mongo_error:
+                print(f"Error saving simulated traffic to MongoDB: {mongo_error}")
+                mongodb_saved = False
+        else:
+            mongodb_saved = False
+        
+        return {
+            "success": True,
+            "attack_type": attack_type,
+            "features": attack_features,
+            "state": attack_state,
+            "duration": duration,
+            "intensity": intensity,
+            "mongodb_saved": mongodb_saved,
+            "message": f"Simulated {attack_type} attack with intensity {intensity} for {duration} seconds"
+        }
+
+
+# Initialize the simulator
+traffic_simulator = NetworkTrafficSimulator()
+
 @app.route('/api/python/simulate', methods=['POST'])
 def simulate_attack():
     """Simulate a DDoS attack for testing"""
     try:
         data = request.json or {}
-        attack_type = data.get('attack_type', 'tcp_syn_flood')
-        duration = data.get('duration', 60)  # seconds
-        intensity = data.get('intensity', 0.7)  # 0-1 scale
+        attack_type = data.get('attack_type', 'syn_flood')
+        duration = data.get('duration', 60)
+        intensity = data.get('intensity', 0.8)
         
-        # Return a success message with parameters
-        return jsonify({
-            "success": True,
-            "simulation_id": f"sim-{int(time.time())}",
-            "attack_type": attack_type,
-            "duration": duration,
-            "intensity": intensity,
-            "start_time": datetime.now().isoformat()
-        })
+        # Use the sophisticated simulator to generate attack traffic
+        simulation_result = traffic_simulator.simulate_attack_traffic(
+            attack_type=attack_type,
+            duration=duration,
+            intensity=intensity
+        )
+        
+        return jsonify(simulation_result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
