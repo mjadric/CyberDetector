@@ -33,12 +33,32 @@ DDQN_AVAILABLE = False
 
 # Try to import MongoDB
 try:
-    from pymongo import MongoClient
+    from database import (
+        # MongoDB connection functions
+        get_mongodb_connection, 
+        close_mongodb_connection,
+        
+        # MongoDB storage functions
+        store_packet,
+        store_packets_batch,
+        aggregate_traffic_data,
+        store_aggregated_data,
+        get_recent_aggregated_data,
+        
+        # MongoDB attack events and alerts
+        store_attack_event,
+        get_attack_events,
+        store_alert,
+        get_alerts,
+        
+        # Status functions
+        check_database_status
+    )
     MONGO_AVAILABLE = True
     print("MongoDB support is available")
-except ImportError:
+except ImportError as e:
     MONGO_AVAILABLE = False
-    print("Warning: MongoDB support not available")
+    print(f"Warning: MongoDB support not available - {e}")
 
 print("Using basic algorithms for DDoS detection instead of TensorFlow-based DDQN")
 
