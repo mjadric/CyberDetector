@@ -160,6 +160,40 @@ export async function connectToPostgres(): Promise<boolean> {
 }
 
 /**
+ * Reset database by dropping and recreating tables
+ */
+export async function resetDatabase(): Promise<boolean> {
+  if (!sql) {
+    log('Cannot reset database: SQL client not initialized', 'postgres');
+    return false;
+  }
+  
+  try {
+    log('Resetting PostgreSQL database...', 'postgres');
+    
+    // Drop all tables in reverse order of dependencies
+    await sql`DROP TABLE IF EXISTS network_links`;
+    await sql`DROP TABLE IF EXISTS network_nodes`;
+    await sql`DROP TABLE IF EXISTS traffic_paths`;
+    await sql`DROP TABLE IF EXISTS alerts`;
+    await sql`DROP TABLE IF EXISTS network_traffic`;
+    await sql`DROP TABLE IF EXISTS dashboard_metrics`;
+    await sql`DROP TABLE IF EXISTS network_metrics`;
+    await sql`DROP TABLE IF EXISTS users`;
+    
+    log('All tables dropped successfully', 'postgres');
+    
+    // Recreate tables
+    await createTables();
+    
+    return true;
+  } catch (error) {
+    log(`Error resetting database: ${error}`, 'postgres');
+    return false;
+  }
+}
+
+/**
  * Create database tables if they don't exist
  */
 async function createTables() {

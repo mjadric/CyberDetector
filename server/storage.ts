@@ -736,8 +736,8 @@ export class MemStorage implements IStorage {
     if (!dbStatus.postgresConnected) return;
     
     try {
-      // Create some initial metrics data
-      const dbMetrics = [
+      // Create dashboard metrics
+      const dashboardMetrics = [
         { 
           name: "Network Load", 
           value: "42%", 
@@ -764,14 +764,79 @@ export class MemStorage implements IStorage {
         }
       ];
       
-      // Insert into PostgreSQL
-      for (const metric of dbMetrics) {
-        await pgInsertNetworkMetric(metric);
+      // Import dashboard metric functions from postgres.ts
+      const { insertDashboardMetric } = await import('./database/postgres');
+      
+      // Insert into PostgreSQL dashboardMetrics table
+      for (const metric of dashboardMetrics) {
+        await insertDashboardMetric(metric);
       }
+      
+      // Also seed the network_metrics table with more detailed data
+      await this.seedNetworkMetricsData();
       
       log('Seeded PostgreSQL with initial metrics data', 'storage');
     } catch (error) {
       log(`Error seeding PostgreSQL metrics: ${error}`, 'storage');
+    }
+  }
+  
+  /**
+   * Seed the network_metrics table with detailed metrics data
+   */
+  private async seedNetworkMetricsData(): Promise<void> {
+    if (!dbStatus.postgresConnected) return;
+    
+    try {
+      // Create network metrics with the new schema
+      const networkMetricsData = [
+        {
+          trafficVolume: 2450,
+          packetRate: 8500,
+          synRatio: 0.32,
+          sourceEntropy: 3.75,
+          destinationEntropy: 2.95,
+          uniqueSrcIps: 128,
+          uniqueDstIps: 24,
+          protocolDistribution: JSON.stringify({
+            TCP: 42,
+            UDP: 28,
+            ICMP: 15,
+            HTTP: 10,
+            HTTPS: 5
+          }),
+          threatLevel: 'medium'
+        },
+        {
+          trafficVolume: 1980,
+          packetRate: 7200,
+          synRatio: 0.28,
+          sourceEntropy: 3.62,
+          destinationEntropy: 2.88,
+          uniqueSrcIps: 112,
+          uniqueDstIps: 20,
+          protocolDistribution: JSON.stringify({
+            TCP: 45,
+            UDP: 25,
+            ICMP: 18,
+            HTTP: 8,
+            HTTPS: 4
+          }),
+          threatLevel: 'low'
+        }
+      ];
+      
+      // Import network metric functions from postgres.ts
+      const { insertNetworkMetric } = await import('./database/postgres');
+      
+      // Insert into PostgreSQL networkMetrics table
+      for (const metric of networkMetricsData) {
+        await insertNetworkMetric(metric);
+      }
+      
+      log('Seeded PostgreSQL with network metrics data', 'storage');
+    } catch (error) {
+      log(`Error seeding network metrics: ${error}`, 'storage');
     }
   }
   
