@@ -857,34 +857,60 @@ export class MemStorage implements IStorage {
         }).toArray();
         
         if (trafficDocs.length > 0) {
-          // Create hour buckets for last 24 hours
+          // Create hour buckets for last 6 hours with current time
           const hourBuckets: Record<string, { normal: number, attack: number }> = {};
           
-          // Initialize all hour buckets with zeros
-          for (let i = 0; i < 24; i++) {
-            const hourString = `${i}:00`;
-            hourBuckets[hourString] = { normal: 0, attack: 0 };
+          // Get current hour
+          const currentHour = now.getHours();
+          const currentMinute = now.getMinutes();
+          
+          // Create dynamic time labels for the last 6 hours
+          for (let i = 0; i < 6; i++) {
+            // Calculate hour going backwards from current time
+            const hourOffset = (currentHour - i + 24) % 24;
+            
+            // Format with current time for the most recent point
+            let timeLabel;
+            if (i === 0) {
+              timeLabel = `${currentHour}:${currentMinute.toString().padStart(2, '0')}`;
+            } else {
+              timeLabel = `${hourOffset}:00`;
+            }
+            
+            hourBuckets[timeLabel] = { normal: 0, attack: 0 };
           }
           
           // Group traffic by hour
           trafficDocs.forEach(doc => {
-            const hour = doc.timestamp.getHours();
-            const hourString = `${hour}:00`;
+            const docHour = doc.timestamp.getHours();
+            const docMinute = doc.timestamp.getMinutes();
             
-            if (doc.is_anomaly) {
-              hourBuckets[hourString].attack++;
+            // Find the appropriate bucket for this document
+            // For documents in the current hour
+            if (docHour === currentHour) {
+              const timeLabel = `${currentHour}:${currentMinute.toString().padStart(2, '0')}`;
+              if (hourBuckets[timeLabel]) {
+                if (doc.is_anomaly) {
+                  hourBuckets[timeLabel].attack++;
+                } else {
+                  hourBuckets[timeLabel].normal++;
+                }
+              }
             } else {
-              hourBuckets[hourString].normal++;
+              // For documents from previous hours
+              const timeLabel = `${docHour}:00`;
+              if (hourBuckets[timeLabel]) {
+                if (doc.is_anomaly) {
+                  hourBuckets[timeLabel].attack++;
+                } else {
+                  hourBuckets[timeLabel].normal++;
+                }
+              }
             }
           });
           
-          // Convert to arrays for chart.js
-          const labels = Object.keys(hourBuckets).sort((a, b) => {
-            const hourA = parseInt(a.split(':')[0]);
-            const hourB = parseInt(b.split(':')[0]);
-            return hourA - hourB;
-          });
-          
+          // Convert to arrays for chart.js - reversed to show oldest to newest (left to right)
+          const labels = Object.keys(hourBuckets).reverse();
           const normalData = labels.map(hour => hourBuckets[hour].normal);
           const attackData = labels.map(hour => hourBuckets[hour].attack);
           
@@ -896,8 +922,29 @@ export class MemStorage implements IStorage {
       }
     }
     
-    // Fallback to mock data
-    return this.trafficData;
+    // Fallback to mock data with real-time labels
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    
+    // Create dynamic time labels for the last 6 hours
+    const labels = [];
+    for (let i = 5; i >= 0; i--) {
+      const hourOffset = (currentHour - i + 24) % 24;
+      let timeLabel;
+      if (i === 0) {
+        timeLabel = `${currentHour}:${currentMinute.toString().padStart(2, '0')}`;
+      } else {
+        timeLabel = `${hourOffset}:00`;
+      }
+      labels.push(timeLabel);
+    }
+    
+    return {
+      labels,
+      normalData: [65, 59, 80, 81, 56, 55],
+      attackData: [28, 48, 40, 19, 30, 27]
+    };
   }
   
   async getProtocolDistribution(): Promise<any> {

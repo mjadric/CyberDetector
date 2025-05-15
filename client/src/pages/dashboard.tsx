@@ -61,24 +61,10 @@ export default function Dashboard() {
           <p className="text-muted-foreground">Overview of network status and threats</p>
         </div>
         <div className="flex space-x-2">
-          <Button 
-            variant={autoRefresh ? "default" : "outline"} 
-            size="sm"
-            onClick={() => setAutoRefresh(!autoRefresh)}
-            className="flex items-center"
-          >
-            {autoRefresh ? (
-              <>
-                <div className="h-2 w-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
-                Auto-refresh ON
-              </>
-            ) : (
-              <>
-                <div className="h-2 w-2 rounded-full bg-slate-300 mr-2"></div>
-                Auto-refresh OFF
-              </>
-            )}
-          </Button>
+          <div className="flex items-center text-sm text-muted-foreground mr-2">
+            <div className="h-2 w-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
+            Auto-refresh aktivno
+          </div>
           <Button 
             variant="outline" 
             size="sm"
