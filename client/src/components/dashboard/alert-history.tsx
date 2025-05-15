@@ -55,8 +55,17 @@ export default function AlertHistory({ alerts }: AlertHistoryProps) {
                   </span>
                 </TableCell>
                 <TableCell className="py-2">
-                  <span className={`px-2 py-1 rounded-full ${statusColors[alert.status].bg} ${statusColors[alert.status].text} text-xs`}>
-                    {alert.status === 'active' ? 'Active' : 'Mitigated'}
+                  <span className={`px-2 py-1 rounded-full ${
+                    statusColors[alert.status as Status]?.bg || 
+                    (alert.status === 'acknowledged' ? 'bg-[#10B981] bg-opacity-20' : 'bg-[#EF4444] bg-opacity-20')
+                  } ${
+                    statusColors[alert.status as Status]?.text || 
+                    (alert.status === 'acknowledged' ? 'text-[#10B981]' : 'text-[#EF4444]')
+                  } text-xs`}>
+                    {alert.status === 'active' ? 'Active' : 
+                     alert.status === 'acknowledged' ? 'Acknowledged' : 
+                     alert.status === 'mitigated' ? 'Mitigated' : 
+                     alert.status}
                   </span>
                 </TableCell>
               </TableRow>

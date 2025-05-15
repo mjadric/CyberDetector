@@ -36,6 +36,10 @@ export const statusColors = {
     bg: "bg-[#10B981] bg-opacity-20",
     text: "text-[#10B981]",
   },
+  acknowledged: {
+    bg: "bg-[#10B981] bg-opacity-20",
+    text: "text-[#10B981]",
+  },
   suspicious: {
     bg: "bg-[#F59E0B] bg-opacity-20",
     text: "text-[#F59E0B]",

@@ -34,6 +34,13 @@ export default function TrafficChart({ data }: TrafficChartProps) {
           chartInstance.current.destroy();
         }
         
+        // Use the provided data prop or fallback to empty arrays
+        const chartData = data || { 
+          labels: [], 
+          normalData: [], 
+          attackData: [] 
+        };
+        
         chartInstance.current = new Chart(ctx, {
           type: "line",
           data: {
@@ -105,7 +112,7 @@ export default function TrafficChart({ data }: TrafficChartProps) {
           <div>
             <h3 className="font-semibold text-lg">Network Traffic Volume</h3>
             <p className="text-sm text-muted-foreground">
-              Praćenje količine mrežnog prometa u stvarnom vremenu sa prikazom normalnog i napadačkog prometa
+              Real-time monitoring of network traffic volume showing normal and attack traffic
             </p>
           </div>
           <div className="flex space-x-2">
