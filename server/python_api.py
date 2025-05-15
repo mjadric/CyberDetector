@@ -178,7 +178,7 @@ def generate_mock_analysis_data():
     }
 
 # API routes
-@app.route('/status', methods=['GET'])
+@app.route('/api/python/status', methods=['GET'])
 def get_status():
     """Return the status of the Python API server"""
     return jsonify({
@@ -209,7 +209,7 @@ def get_topology():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/vulnerability', methods=['GET'])
+@app.route('/api/python/vulnerability', methods=['GET'])
 def get_vulnerability():
     """Return vulnerability analysis data"""
     try:
@@ -218,7 +218,7 @@ def get_vulnerability():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/traffic-paths', methods=['GET'])
+@app.route('/api/python/traffic-paths', methods=['GET'])
 def get_traffic_paths():
     """Return traffic paths data"""
     try:
@@ -227,7 +227,7 @@ def get_traffic_paths():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/train', methods=['POST'])
+@app.route('/api/python/train', methods=['POST'])
 def train_model():
     """Train the DDQN model with a hybrid approach"""
     try:
@@ -256,7 +256,7 @@ def train_model():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/mitigate', methods=['POST'])
+@app.route('/api/python/mitigate', methods=['POST'])
 def mitigate_attack():
     """Take mitigation action against an attack"""
     try:
